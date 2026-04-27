@@ -46,6 +46,10 @@ export interface EQNodeData {
   gain: number;
   q: number;
   enabled?: boolean;
+  minFreq?: number;
+  maxFreq?: number;
+  minGain?: number;
+  maxGain?: number;
 }
 
 /**

@@ -42,6 +42,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
 
+  const userNodesRef = useRef(userNodes);
+  useEffect(() => {
+    userNodesRef.current = userNodes;
+  }, [userNodes]);
+
   // Resize handling
   useEffect(() => {
     if (!containerRef.current) return;
@@ -122,6 +127,24 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.fillText(`${amp}`, dimensions.width - 40, y);
       });
+
+      // --- Draw Global Gain Hints ---
+      // The user hints at [3, 9] dB and [-9, -3] dB as where target might be
+      const yTop1 = gainToY(9) * dimensions.height;
+      const yTop2 = gainToY(3) * dimensions.height;
+      const yBot1 = gainToY(-3) * dimensions.height;
+      const yBot2 = gainToY(-9) * dimensions.height;
+      
+      ctx.fillStyle = 'rgba(234, 179, 8, 0.05)';
+      ctx.fillRect(0, yTop1, dimensions.width, yTop2 - yTop1);
+      
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.05)';
+      ctx.fillRect(0, yBot1, dimensions.width, yBot2 - yBot1);
+      
+      // Draw borders for the global gain hints
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.strokeRect(0, yTop1, dimensions.width, yTop2 - yTop1);
+      ctx.strokeRect(0, yBot1, dimensions.width, yBot2 - yBot1);
 
       // --- Draw Spectrum ---
       const drawSpectrum = (data: Float32Array, colorGr: string, envelopeRef: React.MutableRefObject<Float32Array | null>, strokeColor?: string) => {
@@ -388,10 +411,18 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             newNodes[activeNodeIdx] = newNode;
         } else {
             const newNode = { ...newNodes[activeNodeIdx] };
-            newNode.freq = newFreq;
+            let finalFreq = newFreq;
+            if (newNode.minFreq !== undefined && newNode.maxFreq !== undefined) {
+                finalFreq = Math.max(newNode.minFreq, Math.min(newNode.maxFreq, finalFreq));
+            }
+            newNode.freq = finalFreq;
             // Only update gain if it's not a highpass/lowpass (which usually fix gain at 0)
             if (newNode.type !== 'highpass' && newNode.type !== 'lowpass') {
-              newNode.gain = newGain;
+              let finalGain = newGain;
+              if (newNode.minGain !== undefined && newNode.maxGain !== undefined) {
+                  finalGain = Math.max(newNode.minGain, Math.min(newNode.maxGain, finalGain));
+              }
+              newNode.gain = finalGain;
             }
             newNodes[activeNodeIdx] = newNode;
         }
