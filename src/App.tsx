@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Plus } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 
@@ -17,6 +17,7 @@ export default function App() {
   const [selectedTrackId, setSelectedTrackId] = useState<string>('random-builtin');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
 
   // Load from local storage and initialize indexedDB
   useEffect(() => {
@@ -50,6 +51,17 @@ export default function App() {
     }
   };
 
+  const handleDeleteCustomTrack = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await TrackManager.deleteCustomTrack(id);
+    const newCustomTracks = TrackManager.getCustomTracks();
+    setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: newCustomTracks });
+    if (selectedTrackId === id) {
+        setSelectedTrackId('random-builtin');
+    } else if (selectedTrackId === 'random-custom' && newCustomTracks.length === 0) {
+        setSelectedTrackId('random-builtin');
+    }
+  };
 
   // Save to local storage
   const saveScore = (level: number, score: number) => {
@@ -254,61 +266,136 @@ export default function App() {
         >
           <div className="flex items-center justify-between p-6 border-b border-slate-800">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Settings className="w-5 h-5 text-cyan-400"/>
-              Settings
+              {settingsView === 'main' ? (
+                <>
+                  <Settings className="w-5 h-5 text-cyan-400"/>
+                  Settings
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => setSettingsView('main')} 
+                    className="text-slate-400 hover:text-slate-200 transition -ml-2 p-1.5 rounded-lg hover:bg-slate-800"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <Music className="w-5 h-5 text-cyan-400 ml-1"/>
+                  Audio Source
+                </>
+              )}
             </h2>
-            <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-200 transition">
+            <button onClick={() => { setIsSettingsOpen(false); setTimeout(() => setSettingsView('main'), 300); }} className="text-slate-400 hover:text-slate-200 transition">
               <X className="w-5 h-5" />
             </button>
           </div>
           
           <div className="p-6 flex-1 overflow-y-auto">
-            {/* Audio Source Settings */}
-            <div className="mb-8">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 flex items-center gap-2">
-                <Music className="w-4 h-4" />
-                Audio Source
-              </h3>
-              
-              <div className="space-y-4">
+            {settingsView === 'main' ? (
+              <div className="space-y-3">
+                <button 
+                  onClick={() => setSettingsView('audio')}
+                  className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 group-hover:bg-indigo-500/20 group-hover:text-indigo-300 transition-colors">
+                      <Music className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-slate-200">Audio Source</h3>
+                      <p className="text-sm text-slate-400 mt-0.5">Manage tracks and playback mode</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-2">Select Track Pool</label>
-                  <select
-                      value={selectedTrackId}
-                      onChange={(e) => setSelectedTrackId(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 text-sm text-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-cyan-500 transition-colors"
-                  >
-                      <option value="random">Random (All Tracks)</option>
-                      <option value="random-builtin">Random (Built-in)</option>
-                      {tracks.custom.length > 0 && (
-                        <option value="random-custom">Random (Custom)</option>
-                      )}
-                      {tracks.builtIn.length > 0 && (
-                          <optgroup label="Built-in Tracks">
-                              {tracks.builtIn.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                          </optgroup>
-                      )}
-                      {tracks.custom.length > 0 && (
-                          <optgroup label="Custom Audios">
-                              {tracks.custom.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                          </optgroup>
-                      )}
-                  </select>
+                  <label className="block text-sm text-slate-400 mb-2">Random Playback Mode</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button 
+                      onClick={() => setSelectedTrackId('random')}
+                      className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2", selectedTrackId === 'random' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
+                    >
+                      <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random' ? 'bg-cyan-400' : 'bg-transparent')} />
+                      Random (All Tracks)
+                    </button>
+                    <button 
+                      onClick={() => setSelectedTrackId('random-builtin')}
+                      className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2", selectedTrackId === 'random-builtin' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
+                    >
+                      <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-builtin' ? 'bg-cyan-400' : 'bg-transparent')} />
+                      Random (Built-in)
+                    </button>
+                    <button 
+                      onClick={() => tracks.custom.length > 0 && setSelectedTrackId('random-custom')}
+                      disabled={tracks.custom.length === 0}
+                      className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed", selectedTrackId === 'random-custom' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
+                    >
+                      <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-custom' ? 'bg-cyan-400' : 'bg-transparent')} />
+                      Random (Custom)
+                    </button>
+                  </div>
                 </div>
 
                 <div>
+                  <label className="block text-sm text-slate-400 mb-2">Built-in Tracks</label>
+                  <div className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar">
+                    {tracks.builtIn.map(t => (
+                      <button 
+                        key={t.id} 
+                        onClick={() => setSelectedTrackId(t.id)} 
+                        className={cn("w-full text-left px-3 py-2 rounded-md text-sm transition-colors cursor-pointer break-words", selectedTrackId === t.id ? "bg-cyan-500/20 text-cyan-400 font-medium" : "hover:bg-slate-800 text-slate-300")}
+                      >
+                        {t.name.replace(/\.[^/.]+$/, "")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex items-center justify-between text-sm text-slate-400 mb-2">
+                    <span>Custom Tracks</span>
+                  </label>
+                  <div className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3">
+                    {tracks.custom.length > 0 ? tracks.custom.map(t => (
+                      <div 
+                        key={t.id} 
+                        onClick={() => setSelectedTrackId(t.id)}
+                        className={cn("group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer", selectedTrackId === t.id ? "bg-cyan-500/20 text-cyan-400 font-medium whitespace-normal" : "hover:bg-slate-800 text-slate-300 whitespace-normal")}
+                      >
+                        <span className="flex-1 text-left break-words pr-2">
+                          {t.name.replace(/\.[^/.]+$/, "")}
+                        </span>
+                        <button 
+                          onClick={(e) => handleDeleteCustomTrack(t.id, e)}
+                          className="text-slate-500 hover:text-red-400 p-1.5 -mr-1.5 rounded transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 focus:opacity-100"
+                          title="Delete track"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )) : (
+                      <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full px-3 py-8 text-center text-sm text-slate-500 hover:text-slate-400 bg-slate-900/30 hover:bg-slate-900/50 rounded-lg border border-dashed border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
+                      >
+                        No custom tracks uploaded yet. Click to upload.
+                      </button>
+                    )}
+                  </div>
                   <button 
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-lg transition"
+                      className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-lg transition shadow-sm"
                       title="Supported formats: MP3, WAV, AAC, OGG, FLAC"
                   >
                       <Upload className="w-4 h-4" />
                       Upload Tracks
                   </button>
-                  <p className="text-xs text-center text-slate-500 mt-2">MP3, WAV, AAC, OGG, FLAC</p>
+                  <p className="text-xs text-center text-slate-500 mt-3">Supported formats: MP3, WAV, AAC, OGG, FLAC</p>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

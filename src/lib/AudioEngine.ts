@@ -17,6 +17,7 @@ export class AudioEngine {
   userMakeupGain: GainNode;
   
   masterGain: GainNode;
+  compressor: DynamicsCompressorNode;
 
   targetAnalyser: AnalyserNode;
   userAnalyser: AnalyserNode;
@@ -34,8 +35,17 @@ export class AudioEngine {
     this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     // Setup routing
+    this.compressor = this.ctx.createDynamicsCompressor();
+    // Limiter settings
+    this.compressor.threshold.value = -1.0;
+    this.compressor.knee.value = 2.0;
+    this.compressor.ratio.value = 20.0;
+    this.compressor.attack.value = 0.002;
+    this.compressor.release.value = 0.100;
+
     this.masterGain = this.ctx.createGain();
-    this.masterGain.connect(this.ctx.destination);
+    this.masterGain.connect(this.compressor);
+    this.compressor.connect(this.ctx.destination);
     
     // Listen paths
     this.targetGain = this.ctx.createGain();
@@ -380,6 +390,33 @@ export class AudioEngine {
     const makeUpNode = isTarget ? this.targetMakeupGain : this.userMakeupGain;
     makeUpNode.gain.cancelScheduledValues(this.ctx.currentTime);
     makeUpNode.gain.value = makeupGainLinear;
+  }
+
+  getIndividualFrequencyResponses(isTarget: boolean, width: number): Float32Array[] {
+    const filters = isTarget ? this.targetFilters : this.userFilters;
+    const freqs = new Float32Array(width);
+    const minLog = Math.log10(MIN_FREQ);
+    const maxLog = Math.log10(MAX_FREQ);
+    for (let i = 0; i < width; i++) {
+        freqs[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
+    }
+
+    const responses: Float32Array[] = [];
+    
+    if (filters.length > 0) {
+      filters.forEach(f => {
+          const mag = new Float32Array(width);
+          const phase = new Float32Array(width);
+          f.getFrequencyResponse(freqs, mag, phase);
+          const outDb = new Float32Array(width);
+          for(let i = 0; i < width; i++) {
+              outDb[i] = 20 * Math.log10(mag[i] || 1);
+          }
+          responses.push(outDb);
+      });
+    }
+
+    return responses;
   }
 
   getFrequencyResponse(isTarget: boolean, width: number): Float32Array {

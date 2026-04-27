@@ -11,6 +11,17 @@ interface EQCanvasProps {
   showTarget: boolean;
 }
 
+export const BAND_COLORS = [
+  '239, 68, 68',   // Red
+  '249, 115, 22',  // Orange
+  '234, 179, 8',   // Yellow
+  '34, 197, 94',   // Green
+  '6, 182, 212',   // Cyan
+  '59, 130, 246',  // Blue
+  '168, 85, 247',  // Purple
+  '236, 72, 153'   // Pink
+];
+
 export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -329,7 +340,47 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const response = engine.getFrequencyResponse(isTarget, dimensions.width);
         const midY = dimensions.height / 2;
 
-        if (!isTarget) {
+        if (!isTarget && userNodes) {
+            const individualResponses = engine.getIndividualFrequencyResponses(false, dimensions.width);
+            const BAND_COLORS = [
+              '239, 68, 68',   // Red
+              '249, 115, 22',  // Orange
+              '234, 179, 8',   // Yellow
+              '34, 197, 94',   // Green
+              '6, 182, 212',   // Cyan
+              '59, 130, 246',  // Blue
+              '168, 85, 247',  // Purple
+              '236, 72, 153'   // Pink
+            ];
+
+            // Draw individual band fills
+            ctx.save();
+            ctx.globalCompositeOperation = 'screen';
+            individualResponses.forEach((indResponse, idx) => {
+                const bandColor = BAND_COLORS[idx % BAND_COLORS.length];
+                ctx.beginPath();
+                for (let x = 0; x < dimensions.width; x++) {
+                    const db = indResponse[x];
+                    const y = gainToY(db) * dimensions.height;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.lineTo(dimensions.width, midY);
+                ctx.lineTo(0, midY);
+                ctx.closePath();
+                
+                // Determine if this band is mostly cutting or boosting to set fill color appropriately
+                let isCut = false;
+                if (userNodes[idx] && userNodes[idx].gain < 0) {
+                    isCut = true;
+                }
+                
+                ctx.fillStyle = `rgba(${bandColor}, ${isCut ? '0.15' : '0.25'})`;
+                ctx.fill();
+            });
+            ctx.restore();
+            
+            // Draw global curve fill (subtle background to tie it all together, mostly visible where bands combine)
             ctx.save();
             ctx.beginPath();
             for (let x = 0; x < dimensions.width; x++) {
@@ -341,18 +392,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             ctx.lineTo(dimensions.width, midY);
             ctx.lineTo(0, midY);
             ctx.closePath();
-
-            // Clip all subsequent drawing to the area inside this curve-to-zero-baseline shape
             ctx.clip();
-
-            // Background fill for boosts (above 0dB line)
-            ctx.fillStyle = 'rgba(234, 179, 8, 0.35)'; // Semi-transparent yellow
-            ctx.fillRect(0, 0, dimensions.width, midY);
-
-            // Background fill for cuts (below 0dB line)
-            ctx.fillStyle = 'rgba(56, 189, 248, 0.35)'; // Semi-transparent blue
-            ctx.fillRect(0, midY, dimensions.width, dimensions.height - midY);
-
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fillRect(0, 0, dimensions.width, dimensions.height);
             ctx.restore();
         }
 
@@ -518,12 +560,16 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 onDoubleClick={() => handleDoubleClick(idx)}
                 onWheel={(e: any) => handleWheel(e, idx)}
                 className={cn(
-                    "w-4 h-4 rounded-full border-2 cursor-grab transition-colors",
-                    isActive ? "bg-green-500 border-white scale-125 z-20 shadow-[0_0_20px_rgba(34,197,94,0.8)]" 
-                             : isBypassed ? "bg-slate-500 border-slate-400"
-                                      : isBoost ? "bg-yellow-500/80 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:bg-yellow-400"
-                                                : "bg-sky-500/80 border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:bg-sky-400"
+                    "w-4 h-4 rounded-full border-2 cursor-grab transition-all",
+                    isActive ? "border-white scale-125 z-20" : "border-slate-300"
                 )}
+                style={{
+                  backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, ${isBypassed ? 0.2 : 0.8})`,
+                  borderColor: isBypassed ? 'rgba(148, 163, 184, 0.5)' : `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`,
+                  boxShadow: isActive 
+                    ? `0 0 20px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
+                    : (isBypassed ? 'none' : `0 0 10px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.3)`)
+                }}
             >
             </div>
 
@@ -532,9 +578,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
               className={cn(
                   "absolute h-[2px] rounded-full pointer-events-none transition-all hidden",
                   isActive && "block",
-                  isBoost ? "bg-yellow-400/50" : "bg-sky-400/50"
               )}
-              style={{ width: `${visualWidth}px` }}
+              style={{ 
+                  width: `${visualWidth}px`,
+                  backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
+              }}
             />
             
             {/* Hover / Active Tooltip */}

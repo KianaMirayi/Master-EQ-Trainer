@@ -3,7 +3,7 @@ import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Uploa
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
 import { generateTargetForLevel, generateUserInitial } from '../lib/GameLogic';
-import { EQCanvas } from './EQCanvas';
+import { EQCanvas, BAND_COLORS } from './EQCanvas';
 import { WaveformPlayer } from './WaveformPlayer';
 import { TrackManager, Track } from '../lib/TrackManager';
 
@@ -300,6 +300,11 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest shrink-0">Bands:</span>
               {userNodes.map((node, idx) => {
                 const isBypassed = node.enabled === false;
+                const activeColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`;
+                const bgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.1)`;
+                const borderColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.3)`;
+                const hoverBgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.2)`;
+
                 return (
                   <button
                     key={node.id}
@@ -311,14 +316,31 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                     className={cn(
                         "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition shrink-0",
                         !isBypassed 
-                            ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20" 
+                            ? "" // Colors applied via style
                             : "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
                     )}
+                    style={!isBypassed ? {
+                        backgroundColor: bgColor,
+                        borderColor: borderColor,
+                        color: activeColor
+                    } : {}}
+                    onMouseEnter={(e) => {
+                        if (!isBypassed) e.currentTarget.style.backgroundColor = hoverBgColor;
+                    }}
+                    onMouseLeave={(e) => {
+                        if (!isBypassed) e.currentTarget.style.backgroundColor = bgColor;
+                    }}
                   >
-                    <div className={cn(
-                        "w-2 h-2 rounded-full",
-                        !isBypassed ? "bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]" : "bg-slate-600"
-                    )} />
+                    <div 
+                      className={cn(
+                          "w-2 h-2 rounded-full transition-colors",
+                          isBypassed ? "bg-slate-600" : ""
+                      )} 
+                      style={!isBypassed ? {
+                          backgroundColor: activeColor,
+                          boxShadow: `0 0 8px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
+                      } : {}}
+                    />
                     Band {idx + 1} {!isBypassed ? 'ON' : 'BYPASS'}
                   </button>
                 );
