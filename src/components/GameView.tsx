@@ -178,13 +178,20 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     }
   };
 
+  // Load custom tracks if not already loaded
+  useEffect(() => {
+    TrackManager.init().then(() => {
+      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
+    });
+  }, []);
+
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!engine) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      const track = TrackManager.addCustomTrack(file);
+      const track = await TrackManager.addCustomTrack(file);
       setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
       setSelectedTrackId(track.id);
     } catch (err) {

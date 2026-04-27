@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GameView } from './components/GameView';
 import { Headphones, Trophy, BarChart2, FolderDown, Lock } from 'lucide-react';
 import { cn } from './lib/utils';
+import { TrackManager } from './lib/TrackManager';
 
 interface LevelScore {
   level: number;
@@ -15,11 +16,13 @@ export default function App() {
 
   // Load from local storage
   useEffect(() => {
+    TrackManager.init(); // Initialize indexedDB cached tracks
     const saved = localStorage.getItem('eq_trainer_scores');
     if (saved) {
       try { setScores(JSON.parse(saved)); } catch (e) {}
     }
   }, []);
+
 
   // Save to local storage
   const saveScore = (level: number, score: number) => {

@@ -1,3 +1,5 @@
+import { get, set, del, entries } from 'idb-keyval';
+
 export interface Track {
     id: string;
     name: string;
@@ -16,8 +18,29 @@ export const BUILT_IN_TRACKS: Track[] = [
 
 ];
 
+const STORE_KEY = 'custom-tracks-v1';
+
 export class TrackManager {
     private static customTracks: Track[] = [];
+    private static isLoaded = false;
+
+    static async init(): Promise<void> {
+        if (this.isLoaded) return;
+        try {
+            const stored = await get(STORE_KEY);
+            if (stored && Array.isArray(stored)) {
+                this.customTracks = stored.map((item: any) => ({
+                    id: item.id,
+                    name: item.name,
+                    file: item.file,
+                    isCustom: true
+                }));
+            }
+        } catch (e) {
+            console.error("Failed to load custom tracks from IndexedDB", e);
+        }
+        this.isLoaded = true;
+    }
 
     static getBuiltInTracks(): Track[] {
         return BUILT_IN_TRACKS;
@@ -31,14 +54,25 @@ export class TrackManager {
         return [...this.getBuiltInTracks(), ...this.getCustomTracks()];
     }
 
-    static addCustomTrack(file: File): Track {
+    static async addCustomTrack(file: File): Promise<Track> {
         const track: Track = {
             id: `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: file.name,
-            file: file,
+            file: file, // File objects are clonable and can be stored in IndexedDB
             isCustom: true
         };
         this.customTracks.push(track);
+        
+        try {
+            await set(STORE_KEY, this.customTracks.map(t => ({
+                id: t.id,
+                name: t.name,
+                file: t.file
+            })));
+        } catch (e) {
+             console.error("Failed to save custom track to IndexedDB", e);
+        }
+
         return track;
     }
 
