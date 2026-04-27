@@ -37,11 +37,13 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
 
 interface GameViewProps {
   level: number;
+  selectedTrackId: string;
   onLevelComplete: (score: number) => void;
+  onRetry: (score: number) => void;
   onBack: () => void;
 }
 
-export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
+export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [targetNodes, setTargetNodes] = useState<EQNodeData[]>([]);
@@ -49,11 +51,8 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
   const [listenMode, setListenMode] = useState<'target' | 'user'>('user');
   const [isSettled, setIsSettled] = useState(false);
   const [score, setScore] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-  const [selectedTrackId, setSelectedTrackId] = useState<string>('builtin-2');
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   // Engine lifecycle
   useEffect(() => {
@@ -67,15 +66,14 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
   // Preload built-in tracks in the background
   useEffect(() => {
     if (!engine) return;
-    tracks.builtIn.forEach(t => {
+    TrackManager.getBuiltInTracks().forEach(t => {
       // Background preload to enable near zero-latency toggling
       getTrackBuffer(t, engine.ctx).catch(e => console.warn("Preload failed", e));
     });
-  }, [engine, tracks.builtIn]);
+  }, [engine]);
 
   // Set randomized track per level if "random" is selected
-  const currentTrackIdRef = useRef<string | null>(null);
-  const [activeTrack, setActiveTrack] = useState<Track | null>(null);
+  const activeTrackRef = useRef<Track | null>(null);
 
   // Initialize Level & Audio
   useEffect(() => {
@@ -85,12 +83,16 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
       // Decode or Generate audio based on selection
       let tToPlay: Track | null = null;
       if (selectedTrackId === 'random') {
-          tToPlay = TrackManager.getRandomTrack();
+          tToPlay = TrackManager.getRandomTrack('all');
+      } else if (selectedTrackId === 'random-builtin') {
+          tToPlay = TrackManager.getRandomTrack('builtin');
+      } else if (selectedTrackId === 'random-custom') {
+          tToPlay = TrackManager.getRandomTrack('custom');
       } else {
           tToPlay = TrackManager.getAllTracks().find(t => t.id === selectedTrackId) || null;
       }
       
-      setActiveTrack(tToPlay);
+      activeTrackRef.current = tToPlay;
 
       if (tToPlay) {
           try {
@@ -101,6 +103,7 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
              
              const dec = await getTrackBuffer(tToPlay, engine!.ctx);
              engine!.setBuffer(dec);
+             await engine!.play();
           } catch(e) {
              console.error("Failed to load track", e);
              alert("Failed to load audio: " + (e as Error).message + "\n\nIf you just created this file, it might be an empty 0-byte file. Please use the Upload button or drag a real audio file into the IDE.");
@@ -127,7 +130,7 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     return () => {
       engine!.stop();
     };
-  }, [level, engine, selectedTrackId]); // Re-init audio whenever track selection changes too
+  }, [level, engine, selectedTrackId, retryTrigger]); // Re-init audio whenever track selection changes too
 
   useEffect(() => {
     if (!engine) return;
@@ -174,33 +177,12 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
 
   const handleNext = () => {
     if (score !== null) {
-      onLevelComplete(score);
-    }
-  };
-
-  // Load custom tracks if not already loaded
-  useEffect(() => {
-    TrackManager.init().then(() => {
-      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-    });
-  }, []);
-
-  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!engine) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const track = await TrackManager.addCustomTrack(file);
-      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-      setSelectedTrackId(track.id);
-    } catch (err) {
-      console.error('Failed to load track', err);
-      alert('Failed to load audio file.');
-    }
-    
-    if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (score >= 72) {
+        onLevelComplete(score);
+      } else {
+        onRetry(score);
+        setRetryTrigger(r => r + 1);
+      }
     }
   };
 
@@ -210,13 +192,6 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-50 font-sans">
-      <input 
-        type="file" 
-        accept="audio/mp3, audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/flac, audio/x-m4a, audio/webm" 
-        ref={fileInputRef} 
-        onChange={handleAudioUpload} 
-        className="hidden" 
-      />
       {/* Top Bar */}
       <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50">
         <div className="flex items-center gap-4">
@@ -230,35 +205,6 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
           <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 ml-2 shadow-inner">
             {targetNodes.length} Band{targetNodes.length > 1 && 's'}
           </span>
-          
-          <div className="flex items-center gap-2 ml-4">
-            <Music className="w-4 h-4 text-slate-400" />
-            <select
-                value={selectedTrackId}
-                onChange={(e) => setSelectedTrackId(e.target.value)}
-                className="bg-slate-800 border bg-none border-slate-700 text-sm text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500 w-48"
-            >
-                <option value="random">Random (All Tracks)</option>
-                {tracks.builtIn.length > 0 && (
-                    <optgroup label="Built-in Tracks">
-                        {tracks.builtIn.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </optgroup>
-                )}
-                {tracks.custom.length > 0 && (
-                    <optgroup label="Custom Audios">
-                        {tracks.custom.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </optgroup>
-                )}
-            </select>
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition"
-                title="Supported formats: MP3, WAV, AAC, OGG, FLAC"
-            >
-                <Upload className="w-3.5 h-3.5" />
-                Upload
-            </button>
-          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -319,25 +265,6 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
       <main className="flex-1 p-6 relative flex flex-col gap-4">
           <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} />
           
-          {/* Instructions Overlay */}
-          {!isPlaying && !isSettled && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                  <div className="bg-slate-900/90 border border-slate-700 px-8 py-6 rounded-2xl flex flex-col items-center backdrop-blur-sm pointer-events-auto shadow-2xl">
-                    <Play className="w-12 h-12 text-cyan-400 mb-4" />
-                    <h2 className="text-2xl font-bold mb-2">Press Play to Start</h2>
-                    <p className="text-slate-400 text-center max-w-sm mb-6">
-                        Listen to the <b>Target EQ</b>, then adjust your nodes to match it. A/B switch often.
-                    </p>
-                    <button 
-                      onClick={togglePlay}
-                      className="bg-cyan-500 text-slate-900 font-bold px-8 py-3 rounded-full hover:bg-cyan-400 transition"
-                    >
-                      Start Listening
-                    </button>
-                  </div>
-              </div>
-          )}
-
           {/* Settled Feedback Overlay */}
           {isSettled && (
             <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 pointer-events-none">

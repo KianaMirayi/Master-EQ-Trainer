@@ -76,9 +76,13 @@ export class TrackManager {
         return track;
     }
 
-    static getRandomTrack(): Track | null {
-        const all = this.getAllTracks();
-        if (all.length === 0) return null;
-        return all[Math.floor(Math.random() * all.length)];
+    static getRandomTrack(pool: 'all' | 'builtin' | 'custom' = 'all'): Track | null {
+        let list: Track[] = [];
+        if (pool === 'all') list = this.getAllTracks();
+        else if (pool === 'builtin') list = this.getBuiltInTracks();
+        else if (pool === 'custom') list = this.getCustomTracks();
+        
+        if (list.length === 0) return null;
+        return list[Math.floor(Math.random() * list.length)];
     }
 }
