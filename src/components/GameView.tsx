@@ -1,11 +1,39 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload } from 'lucide-react';
+import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
-import { generateDrumLoop } from '../lib/AudioLoopGen';
 import { generateTargetForLevel, generateUserInitial } from '../lib/GameLogic';
 import { EQCanvas } from './EQCanvas';
 import { WaveformPlayer } from './WaveformPlayer';
+import { TrackManager, Track } from '../lib/TrackManager';
+
+const bufferCache = new Map<string, Promise<AudioBuffer>>();
+
+const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuffer> => {
+    if (bufferCache.has(track.id)) {
+        return bufferCache.get(track.id)!;
+    }
+
+    const promise = (async () => {
+        let arrayBuffer;
+        if (track.file) {
+            arrayBuffer = await track.file.arrayBuffer();
+        } else if (track.url) {
+            const url = encodeURI(track.url);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to fetch ${track.url}: ${res.statusText}`);
+            arrayBuffer = await res.arrayBuffer();
+        }
+        if (arrayBuffer && arrayBuffer.byteLength > 0) {
+            return await ctx.decodeAudioData(arrayBuffer);
+        } else {
+            throw new Error("Audio file is empty. Please upload a valid file.");
+        }
+    })();
+
+    bufferCache.set(track.id, promise);
+    return promise;
+};
 
 interface GameViewProps {
   level: number;
@@ -22,6 +50,10 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
   const [isSettled, setIsSettled] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
+  const [selectedTrackId, setSelectedTrackId] = useState<string>('builtin-2');
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
   // Engine lifecycle
   useEffect(() => {
@@ -32,15 +64,49 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     };
   }, []);
 
-  // Initialize Level
+  // Preload built-in tracks in the background
+  useEffect(() => {
+    if (!engine) return;
+    tracks.builtIn.forEach(t => {
+      // Background preload to enable near zero-latency toggling
+      getTrackBuffer(t, engine.ctx).catch(e => console.warn("Preload failed", e));
+    });
+  }, [engine, tracks.builtIn]);
+
+  // Set randomized track per level if "random" is selected
+  const currentTrackIdRef = useRef<string | null>(null);
+  const [activeTrack, setActiveTrack] = useState<Track | null>(null);
+
+  // Initialize Level & Audio
   useEffect(() => {
     if (!engine) return;
 
     async function init() {
-      // 1. Generate Audio if missing
-      if (!engine!.buffer) {
-        const buf = await generateDrumLoop(engine!.ctx);
-        engine!.setBuffer(buf);
+      // Decode or Generate audio based on selection
+      let tToPlay: Track | null = null;
+      if (selectedTrackId === 'random') {
+          tToPlay = TrackManager.getRandomTrack();
+      } else {
+          tToPlay = TrackManager.getAllTracks().find(t => t.id === selectedTrackId) || null;
+      }
+      
+      setActiveTrack(tToPlay);
+
+      if (tToPlay) {
+          try {
+             setIsLoadingAudio(true);
+             // Stop old track and clear buffer immediately
+             engine!.stop();
+             engine!.buffer = null;
+             
+             const dec = await getTrackBuffer(tToPlay, engine!.ctx);
+             engine!.setBuffer(dec);
+          } catch(e) {
+             console.error("Failed to load track", e);
+             alert("Failed to load audio: " + (e as Error).message + "\n\nIf you just created this file, it might be an empty 0-byte file. Please use the Upload button or drag a real audio file into the IDE.");
+          } finally {
+             setIsLoadingAudio(false);
+          }
       }
       
       // 2. Generate Nodes
@@ -61,7 +127,7 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     return () => {
       engine!.stop();
     };
-  }, [level, engine]);
+  }, [level, engine, selectedTrackId]); // Re-init audio whenever track selection changes too
 
   useEffect(() => {
     if (!engine) return;
@@ -118,19 +184,12 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     if (!file) return;
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
-      
-      // Stop current playback if active
-      if (isPlaying) {
-        engine.stop();
-        setIsPlaying(false);
-      }
-      
-      engine.setBuffer(audioBuffer);
+      const track = TrackManager.addCustomTrack(file);
+      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
+      setSelectedTrackId(track.id);
     } catch (err) {
-      console.error('Failed to decode audio file', err);
-      alert('Failed to load audio file. Please try another format like MP3, WAV or AAC.');
+      console.error('Failed to load track', err);
+      alert('Failed to load audio file.');
     }
     
     if (fileInputRef.current) {
@@ -146,7 +205,7 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-50 font-sans">
       <input 
         type="file" 
-        accept="audio/*" 
+        accept="audio/mp3, audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/flac, audio/x-m4a, audio/webm" 
         ref={fileInputRef} 
         onChange={handleAudioUpload} 
         className="hidden" 
@@ -164,13 +223,35 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
           <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 ml-2 shadow-inner">
             {targetNodes.length} Band{targetNodes.length > 1 && 's'}
           </span>
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition ml-2"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            Upload Audio
-          </button>
+          
+          <div className="flex items-center gap-2 ml-4">
+            <Music className="w-4 h-4 text-slate-400" />
+            <select
+                value={selectedTrackId}
+                onChange={(e) => setSelectedTrackId(e.target.value)}
+                className="bg-slate-800 border bg-none border-slate-700 text-sm text-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500 w-48"
+            >
+                <option value="random">Random (All Tracks)</option>
+                {tracks.builtIn.length > 0 && (
+                    <optgroup label="Built-in Tracks">
+                        {tracks.builtIn.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </optgroup>
+                )}
+                {tracks.custom.length > 0 && (
+                    <optgroup label="Custom Audios">
+                        {tracks.custom.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </optgroup>
+                )}
+            </select>
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition"
+                title="Supported formats: MP3, WAV, AAC, OGG, FLAC"
+            >
+                <Upload className="w-3.5 h-3.5" />
+                Upload
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -229,7 +310,7 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
 
       {/* Main Game Area */}
       <main className="flex-1 p-6 relative flex flex-col gap-4">
-          <WaveformPlayer engine={engine} />
+          <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} />
           
           {/* Instructions Overlay */}
           {!isPlaying && !isSettled && (
