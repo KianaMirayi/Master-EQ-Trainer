@@ -1,0 +1,88 @@
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+// Tailwind CSS class merge utility
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+// Global Audio Constants
+export const MIN_FREQ = 20;
+export const MAX_FREQ = 30000;
+export const MAX_GAIN = 12; // visually allow up to +-12dB
+export const TARGET_GAIN_LIMIT = 12;
+
+// Logarithmic Frequency Mapping
+// x goes from 0.0 to 1.0
+export function freqToX(freq: number): number {
+  const minLog = Math.log10(MIN_FREQ);
+  const maxLog = Math.log10(MAX_FREQ);
+  const x = (Math.log10(freq) - minLog) / (maxLog - minLog);
+  return Math.max(0, Math.min(1, x));
+}
+
+export function xToFreq(x: number): number {
+  const minLog = Math.log10(MIN_FREQ);
+  const maxLog = Math.log10(MAX_FREQ);
+  return Math.pow(10, minLog + x * (maxLog - minLog));
+}
+
+// Linear Gain Mapping (-18 to +18 dB)
+export function gainToY(gain: number): number {
+  // map +18 to 0.0, 0 to 0.5, -18 to 1.0
+  const y = 0.5 - (gain / MAX_GAIN) * 0.5;
+  return Math.max(0, Math.min(1, y));
+}
+
+export function yToGain(y: number): number {
+  return (0.5 - y) * 2 * MAX_GAIN;
+}
+
+// Types
+export interface EQNodeData {
+  id: string;
+  type: BiquadFilterType;
+  freq: number;
+  gain: number;
+  q: number;
+  enabled?: boolean;
+}
+
+/**
+ * Validates how close user EQ is to target EQ.
+ * Returns percentage (0-100)
+ */
+export function calculateMatchScore(userNodes: EQNodeData[], targetNodes: EQNodeData[]): number {
+  if (userNodes.length === 0) return 100;
+  
+  let totalScore = 0;
+  // Match sorted by frequency
+  const sortedUser = [...userNodes].sort((a, b) => a.freq - b.freq);
+  const sortedTarget = [...targetNodes].sort((a, b) => a.freq - b.freq);
+
+  for (let i = 0; i < sortedUser.length; i++) {
+    const u = sortedUser[i];
+    const t = sortedTarget[i];
+    
+    // Frequency error (logarithmic distance)
+    const logF_u = Math.log10(u.freq);
+    const logF_t = Math.log10(t.freq);
+    const distF = Math.abs(logF_u - logF_t); // max distance like ~3 (20 to 20k)
+    const scoreF = Math.max(0, 1 - distF / 0.5); // 0.5 decade is 0 points
+
+    // Gain error
+    const uGain = u.enabled === false ? 0 : u.gain;
+    const distG = Math.abs(uGain - t.gain);
+    const scoreG = Math.max(0, 1 - distG / 6); // 6dB off is 0 points
+
+    // Q error
+    // If bypassed, Q doesn't matter, but let's just use it
+    const distQ = Math.abs(u.q - t.q);
+    const scoreQ = Math.max(0, 1 - distQ / 2); // 2 Q-off is 0 points
+
+
+    totalScore += (scoreF * 0.5 + scoreG * 0.35 + scoreQ * 0.15); // Weights
+  }
+  
+  return Math.max(0, Math.round((totalScore / userNodes.length) * 100));
+}
