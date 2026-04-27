@@ -22,6 +22,11 @@ export class AudioEngine {
   userAnalyser: AnalyserNode;
 
   isPlaying = false;
+  isLooping = true;
+  loopStart = 0;
+  loopEnd = 0;
+  playbackOffset = 0;
+  baseCurrentTime = 0;
   currentListenMode: 'target' | 'user' | 'solo' = 'user';
   previousListenMode: 'target' | 'user' = 'user';
 
@@ -75,13 +80,14 @@ export class AudioEngine {
 
   setBuffer(buffer: AudioBuffer) {
     this.buffer = buffer;
+    this.playbackOffset = 0;
+    this.loopEnd = buffer.duration;
     if (this.isPlaying) {
-      this.stop();
-      this.play();
+      this.play(0);
     }
   }
 
-  async play() {
+  async play(timeOffset?: number) {
     console.log("Audio Engine play initiated. Buffer:", !!this.buffer, "State:", this.ctx.state);
     if (!this.buffer) return;
     if (this.ctx.state === 'suspended') {
@@ -93,10 +99,16 @@ export class AudioEngine {
       }
     }
 
+    this.stop(false);
+
     try {
       this.source = this.ctx.createBufferSource();
       this.source.buffer = this.buffer;
-      this.source.loop = true;
+      this.source.loop = this.isLooping;
+      if (this.isLooping) {
+        this.source.loopStart = this.loopStart;
+        this.source.loopEnd = this.loopEnd;
+      }
 
       // source -> filters
       if (this.targetFilters.length > 0) {
@@ -116,7 +128,16 @@ export class AudioEngine {
       // Connect source to solo filter
       this.source.connect(this.soloFilter);
 
-      this.source.start();
+      const startOffset = timeOffset !== undefined ? timeOffset : this.playbackOffset;
+      this.playbackOffset = startOffset;
+      this.baseCurrentTime = this.ctx.currentTime;
+      
+      let actualStartOffset = startOffset;
+      if (this.isLooping && startOffset > this.loopEnd) {
+          actualStartOffset = this.loopStart + ((startOffset - this.loopStart) % (this.loopEnd - this.loopStart));
+      }
+
+      this.source.start(0, actualStartOffset);
       this.isPlaying = true;
       console.log("Audio Engine playing started, state:", this.ctx.state);
     } catch (err) {
@@ -124,10 +145,67 @@ export class AudioEngine {
     }
   }
 
-  stop() {
+  pause() {
+    this.stop(true);
+  }
+
+  seek(time: number) {
+      if (this.isPlaying) {
+          this.play(time);
+      } else {
+          this.playbackOffset = time;
+      }
+  }
+
+  setLoopPoints(start: number, end: number) {
+      this.loopStart = Math.min(start, end);
+      this.loopEnd = Math.max(start, end);
+      if (this.source) {
+          this.source.loopStart = this.loopStart;
+          this.source.loopEnd = this.loopEnd;
+      }
+      if (this.isPlaying && this.getCurrentTime() > this.loopEnd && this.isLooping) {
+          this.seek(this.loopStart);
+      }
+  }
+
+  toggleLoop(enabled: boolean) {
+      this.isLooping = enabled;
+      if (this.source) {
+          this.source.loop = enabled;
+      }
+      if (enabled && this.isPlaying && this.getCurrentTime() > this.loopEnd) {
+          this.seek(this.loopStart);
+      }
+  }
+
+  getCurrentTime(): number {
+      if (!this.isPlaying) return this.playbackOffset;
+      
+      let t = this.playbackOffset + (this.ctx.currentTime - this.baseCurrentTime);
+      if (this.isLooping && this.buffer && this.loopEnd > 0) {
+          if (t > this.loopEnd) {
+              const loopDuration = this.loopEnd - this.loopStart;
+              if (loopDuration > 0) {
+                 t = this.loopStart + ((t - this.loopStart) % loopDuration);
+              }
+          }
+      } else if (this.buffer && t > this.buffer.duration) {
+          // If not looping and past duration, it means playback finished
+          // We don't automatically update isPlaying here since we don't have an easily trappable onended event without complexities,
+          // but capping to duration is fine for UI.
+          t = this.buffer.duration;
+      }
+      return t;
+  }
+
+  stop(saveOffset = false) {
+    if (this.isPlaying && saveOffset) {
+      this.playbackOffset = this.getCurrentTime();
+    }
     if (this.source) {
-      this.source.stop();
-      this.source.disconnect();
+      try { this.source.stop(); } catch(e) {}
+      try { this.source.disconnect(); } catch(e) {}
       this.source = null;
     }
     this.isPlaying = false;

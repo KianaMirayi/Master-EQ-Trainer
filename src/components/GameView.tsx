@@ -5,6 +5,7 @@ import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
 import { generateDrumLoop } from '../lib/AudioLoopGen';
 import { generateTargetForLevel, generateUserInitial } from '../lib/GameLogic';
 import { EQCanvas } from './EQCanvas';
+import { WaveformPlayer } from './WaveformPlayer';
 
 interface GameViewProps {
   level: number;
@@ -62,10 +63,21 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
     };
   }, [level, engine]);
 
+  useEffect(() => {
+    if (!engine) return;
+    let frameId: number;
+    const syncState = () => {
+      setIsPlaying(engine.isPlaying);
+      frameId = requestAnimationFrame(syncState);
+    };
+    syncState();
+    return () => cancelAnimationFrame(frameId);
+  }, [engine]);
+
   const togglePlay = async () => {
     if (!engine) return;
     if (isPlaying) {
-      engine.stop();
+      engine.pause();
       setIsPlaying(false);
     } else {
       await engine.play();
@@ -162,16 +174,6 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={togglePlay}
-            className={cn(
-              "flex items-center justify-center w-10 h-10 rounded-full transition shadow-lg",
-              isPlaying ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" : "bg-cyan-500 text-slate-900 hover:bg-cyan-400"
-            )}
-          >
-            {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current translate-x-[2px]" />}
-          </button>
-          
           <div className="h-8 bg-slate-800 p-1 rounded-md flex items-center gap-1 min-w-[200px]">
             <button
               onClick={() => handleModeChange('target')}
@@ -226,7 +228,9 @@ export function GameView({ level, onLevelComplete, onBack }: GameViewProps) {
       </header>
 
       {/* Main Game Area */}
-      <main className="flex-1 p-6 relative flex flex-col">
+      <main className="flex-1 p-6 relative flex flex-col gap-4">
+          <WaveformPlayer engine={engine} />
+          
           {/* Instructions Overlay */}
           {!isPlaying && !isSettled && (
               <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
