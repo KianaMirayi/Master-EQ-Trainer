@@ -21,18 +21,31 @@ export function generateTargetForLevel(level: number): EQNodeData[] {
   }
   
   for(let i = 0; i < bandCount; i++) {
+    // Generate Q first to determine safe margin
+    const q = 0.5 + Math.random() * 2;
+    
+    // Define a safe margin (log10 scale). Wider Q (smaller value) needs a larger margin.
+    const safeMargin = 0.3 / q;
+    
     // Generate within specific bands
     const fLogMin = Math.log10(bounds[i][0]);
     const fLogMax = Math.log10(bounds[i][1]);
-    const fRandomLog = fLogMin + Math.random() * (fLogMax - fLogMin);
+    
+    // Contract the randomly chosen range using safeMargin
+    let effLogMin = fLogMin + safeMargin;
+    let effLogMax = fLogMax - safeMargin;
+    if (effLogMax < effLogMin) {
+        const mid = (fLogMin + fLogMax) / 2;
+        effLogMin = mid;
+        effLogMax = mid;
+    }
+    
+    const fRandomLog = effLogMin + Math.random() * (effLogMax - effLogMin);
     const freq = Math.pow(10, fRandomLog);
     
     // Gain +/- 4 to 8 (stays clearly within the 3 to 9 hint intervals)
     const sign = Math.random() > 0.5 ? 1 : -1;
     const gain = sign * (4 + Math.floor(Math.random() * 5)); 
-    
-    // Q
-    const q = 0.5 + Math.random() * 2;
     
     nodes.push({
       id: `target_lvl${level}_b${i}`,
@@ -66,8 +79,13 @@ export function generateUserInitial(targets: EQNodeData[], level: number): EQNod
     let minF = Math.pow(10, Math.log10(t.freq) - logSpan);
     let maxF = Math.pow(10, Math.log10(t.freq) + logSpan);
     
-    // Add some random shift so the target isn't exactly in the center
-    const shift = (Math.random() - 0.5) * logSpan * 0.8;
+    // Add some random shift so the target isn't exactly in the center.
+    // Apply a safe margin such that the target doesn't sit exactly at the edge, especially for wider Q.
+    const safeMargin = 0.3 / t.q;
+    let maxShift = logSpan * 0.8 - safeMargin;
+    if (maxShift < 0.05) maxShift = 0.05; // allow minimal shift if constrained
+    
+    const shift = (Math.random() - 0.5) * 2 * maxShift;
     minF = Math.pow(10, Math.log10(minF) + shift);
     maxF = Math.pow(10, Math.log10(maxF) + shift);
 
@@ -102,7 +120,13 @@ export function generateUserInitial(targets: EQNodeData[], level: number): EQNod
   }
 
   // Third pass: clamp start frequencies to their final non-overlapping ranges
-  for (const node of userNodes) {
+  for (let i = 0; i < userNodes.length; i++) {
+      const node = userNodes[i];
+      const target = targets[i];
+      
+      target.minFreq = node.minFreq;
+      target.maxFreq = node.maxFreq;
+      
       if (node.minFreq !== undefined && node.maxFreq !== undefined) {
           node.freq = Math.max(node.minFreq, Math.min(node.maxFreq, node.freq));
       }

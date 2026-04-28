@@ -107,6 +107,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     userNodesRef.current = userNodes;
   }, [userNodes]);
 
+  const listeningNodeIdxRef = useRef(listeningNodeIdx);
+  useEffect(() => {
+    listeningNodeIdxRef.current = listeningNodeIdx;
+  }, [listeningNodeIdx]);
+
   // Resize handling
   useEffect(() => {
     if (!containerRef.current) return;
@@ -463,12 +468,20 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 ctx.closePath();
                 
                 // Determine if this band is mostly cutting or boosting to set fill color appropriately
+                const latestNodes = userNodesRef.current;
                 let isCut = false;
-                if (userNodes[idx] && userNodes[idx].gain < 0) {
+                if (latestNodes[idx] && latestNodes[idx].gain < 0) {
                     isCut = true;
                 }
                 
-                ctx.fillStyle = `rgba(${bandColor}, ${isCut ? '0.15' : '0.25'})`;
+                const currentListeningIdx = listeningNodeIdxRef.current;
+                let alpha = isCut ? 0.15 : 0.25;
+                if (currentListeningIdx !== null && currentListeningIdx !== idx) {
+                    // dim other bands heavily
+                    alpha = 0.02;
+                }
+                
+                ctx.fillStyle = `rgba(${bandColor}, ${alpha})`;
                 ctx.fill();
             });
             ctx.restore();
@@ -486,12 +499,47 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             ctx.lineTo(0, midY);
             ctx.closePath();
             ctx.clip();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            const currentListeningIdx = listeningNodeIdxRef.current;
+            ctx.fillStyle = currentListeningIdx !== null ? 'rgba(255, 255, 255, 0.01)' : 'rgba(255, 255, 255, 0.05)';
             ctx.fillRect(0, 0, dimensions.width, dimensions.height);
             ctx.restore();
         }
 
-        ctx.strokeStyle = color;
+        const currentListeningIdx = listeningNodeIdxRef.current;
+        if (!isTarget && currentListeningIdx !== null && userNodesRef.current) {
+            const bandColor = BAND_COLORS[currentListeningIdx % BAND_COLORS.length];
+            ctx.strokeStyle = `rgba(${bandColor}, 1)`;
+            
+            // Draw vertical markers for listening band
+            const node = userNodesRef.current[currentListeningIdx];
+            if (node) {
+                // We don't dynamically change Q anymore, just draw the markers for bandwidth 
+                const Q = node.q;
+                const f0 = node.freq; // Ensure to use freq property
+                
+                // Calculate bandpass bandwidth roughly
+                const term = Math.sqrt(1 + 1 / (4 * Q * Q));
+                const fL = f0 * (term - 1 / (2 * Q));
+                const fH = f0 * (term + 1 / (2 * Q));
+                
+                const xL = freqToX(fL) * dimensions.width;
+                const xH = freqToX(fH) * dimensions.width;
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.moveTo(xL, 0);
+                ctx.lineTo(xL, dimensions.height);
+                ctx.moveTo(xH, 0);
+                ctx.lineTo(xH, dimensions.height);
+                ctx.stroke();
+                ctx.restore();
+            }
+        } else {
+            ctx.strokeStyle = color;
+        }
+        
         ctx.lineWidth = 2.5;
         ctx.setLineDash(dashes);
         ctx.beginPath();
@@ -602,15 +650,17 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             // Y delta changes Q
             const yDelta = e.movementY;
             const newNode = { ...newNodes[activeNodeIdx] };
-            newNode.q = Math.max(0.1, Math.min(10, newNode.q - yDelta * 0.1));
+            newNode.q = Math.max(0.1, Math.min(40, newNode.q - yDelta * 0.1));
+            
             newNodes[activeNodeIdx] = newNode;
         } else {
             const newNode = { ...newNodes[activeNodeIdx] };
             let finalFreq = newFreq;
+            
             if (newNode.minFreq !== undefined && newNode.maxFreq !== undefined) {
                 finalFreq = Math.max(newNode.minFreq, Math.min(newNode.maxFreq, finalFreq));
             }
-            newNode.freq = finalFreq;
+            
             // Only update gain if it's not a highpass/lowpass (which usually fix gain at 0)
             if (newNode.type !== 'highpass' && newNode.type !== 'lowpass') {
               let finalGain = newGain;
@@ -619,6 +669,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
               }
               newNode.gain = finalGain;
             }
+            
+            newNode.freq = finalFreq;
+            
             newNodes[activeNodeIdx] = newNode;
         }
         if (listeningNodeIdx !== null && listeningNodeIdx === activeNodeIdx) {
@@ -663,7 +716,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       e.preventDefault();
       const newNodes = [...userNodes];
       const newNode = { ...newNodes[idx] };
-      newNode.q = Math.max(0.1, Math.min(10, newNode.q - Math.sign(e.deltaY) * 0.5));
+      newNode.q = Math.max(0.1, Math.min(40, newNode.q + Math.sign(e.deltaY) * 0.5));
+      
       newNodes[idx] = newNode;
       onNodesChange(newNodes);
   };
@@ -688,7 +742,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const yPos = gainToY(node.gain) * dimensions.height;
         
         // Approximate width parameter for visual feedback based on Q
-        const visualWidth = Math.max(20, Math.min(200, 100 / (node.q || 1)));
+        const effectiveQ = node.q || 1;
+        const visualWidth = Math.max(20, Math.min(200, 100 / effectiveQ));
         const isActive = activeNodeIdx === idx;
         const isBypassed = node.enabled === false;
         const isBoost = node.gain >= 0;
@@ -714,7 +769,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 onWheel={(e: any) => handleWheel(e, idx)}
                 className={cn(
                     "w-4 h-4 rounded-full border-2 cursor-grab transition-all",
-                    isActive ? "border-white scale-125 z-20" : "border-slate-300"
+                    isActive || listeningNodeIdx === idx ? "border-white scale-125 z-20" : "border-slate-300",
+                    listeningNodeIdx !== null && listeningNodeIdx !== idx && "opacity-20 saturate-0 scale-90"
                 )}
                 style={{
                   backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, ${isBypassed ? 0.2 : 0.8})`,
@@ -835,7 +891,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                             {node.gain > 0 ? '+' : ''}{node.gain.toFixed(2)} dB
                         </span>
                         <span>
-                            Q: {node.q.toFixed(2)}
+                            Q: {effectiveQ.toFixed(2)}
                         </span>
                     </div>
                 </div>
