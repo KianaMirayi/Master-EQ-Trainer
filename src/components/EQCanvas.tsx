@@ -4,6 +4,19 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { EQNodeData, freqToX, xToFreq, gainToY, yToGain, cn } from '../lib/utils';
 import { AudioEngine } from '../lib/AudioEngine';
 
+const MIN_Q = 0.1;
+const MAX_Q = 40.0;
+const SCROLL_SENSITIVITY_NORMAL = 1.05;
+const SCROLL_SENSITIVITY_FINE = 1.01;
+
+// Meter Ballistics Configuration (Adjustable)
+const METER_RMS_ATTACK_FACTOR = 0.4; // 0.0 to 1.0 (higher = faster attack)
+const METER_RMS_RELEASE_DB_PER_FRAME = 0.6; // dB to drop per frame
+const METER_PEAK_ATTACK_FACTOR = 0.8; // 0.0 to 1.0 (higher = faster attack)
+const METER_PEAK_RELEASE_DB_PER_FRAME = 0.4; // dB to drop per frame
+const METER_PEAK_HOLD_FRAMES = 60; // How many frames to hold the absolute peak
+const METER_PEAK_HOLD_RELEASE_DB_PER_FRAME = 0.2; // How fast the hold value drops
+
 interface EQCanvasProps {
   engine: AudioEngine;
   userNodes: EQNodeData[];
@@ -138,28 +151,35 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       ctx.lineWidth = 1;
       ctx.font = '10px monospace';
 
-      const FREQ_TICKS = [20, 30, 50, 70, 100, 200, 300, 500, 700, 1000, 2000, 3000, 5000, 7000, 10000, 20000, 30000];
+      const FREQ_TICKS = [20, 30, 50, 70, 100, 200, 300, 500, 700, 1000, 2000, 3000, 5000, 7000, 10000, 20000];
       const FREQ_LABELS: Record<number, string> = {
         20: '20', 30: '30', 50: '50', 70: '70', 100: '100', 200: '200', 300: '300', 
         500: '500', 700: '700', 1000: '1k', 2000: '2k', 3000: '3k', 5000: '5k', 
-        7000: '7k', 10000: '10k', 20000: '20k', 30000: '30k'
+        7000: '7k', 10000: '10k', 20000: '20k'
       };
 
       // Vertical lines (Frequencies)
       FREQ_TICKS.forEach(freq => {
-        const isHighlight = [20, 200, 2000, 20000].includes(freq);
+        const isMajorHighlight = [20, 200, 2000, 20000].includes(freq);
+        const isMinorHighlight = [50, 500, 5000].includes(freq);
         const x = freqToX(freq) * dimensions.width;
         
-        ctx.strokeStyle = isHighlight ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = isHighlight ? 2 : 1;
+        if (isMajorHighlight) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        } else if (isMinorHighlight) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        } else {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        }
+        ctx.lineWidth = (isMajorHighlight || isMinorHighlight) ? 2 : 1;
         
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dimensions.height);
         ctx.stroke();
 
-        ctx.fillStyle = isHighlight ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.4)';
-        if (isHighlight) {
+        ctx.fillStyle = isMajorHighlight ? 'rgba(255, 255, 255, 0.8)' : (isMinorHighlight ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)');
+        if (isMajorHighlight) {
             ctx.font = 'bold 11px monospace';
         } else {
             ctx.font = '10px monospace';
@@ -171,7 +191,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             textX = x + 12; // Push far enough inward from left rounded corner
         } else if (freq === 30000 || (freq === 20000 && x > dimensions.width - 25)) {
             ctx.textAlign = 'right';
-            textX = x - 25; // Push away from meter and right edge
+            textX = x - 45; // Push away from right edge to avoid overlapping with -12 dB label
         } else {
             ctx.textAlign = 'center';
         }
@@ -563,18 +583,29 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       const levels = engine.getMasterLevel();
       const meter = meterPeakRef.current;
       
-      meter.rms = Math.max(levels.rms, meter.rms - 1.5);
-      
-      if (levels.peak > meter.peak) {
-          meter.peak = levels.peak;
-          meter.peakHold = levels.peak;
-          meter.peakHoldFrames = 60; // 1 second hold
+      // RMS Ballistics
+      if (levels.rms > meter.rms) {
+          meter.rms += (levels.rms - meter.rms) * METER_RMS_ATTACK_FACTOR;
       } else {
-          meter.peak = Math.max(levels.peak, meter.peak - 1.5);
+          meter.rms = Math.max(levels.rms, meter.rms - METER_RMS_RELEASE_DB_PER_FRAME);
+      }
+      
+      // Peak Ballistics
+      if (levels.peak > meter.peak) {
+          meter.peak += (levels.peak - meter.peak) * METER_PEAK_ATTACK_FACTOR;
+      } else {
+          meter.peak = Math.max(levels.peak, meter.peak - METER_PEAK_RELEASE_DB_PER_FRAME);
+      }
+
+      // Peak Hold
+      if (levels.peak > meter.peakHold) {
+          meter.peakHold = levels.peak;
+          meter.peakHoldFrames = METER_PEAK_HOLD_FRAMES;
+      } else {
           if (meter.peakHoldFrames > 0) {
               meter.peakHoldFrames--;
           } else {
-              meter.peakHold = Math.max(levels.peak, meter.peakHold - 0.5);
+              meter.peakHold = Math.max(levels.peak, meter.peakHold - METER_PEAK_HOLD_RELEASE_DB_PER_FRAME);
           }
       }
 
@@ -612,12 +643,12 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       ctx.fillRect(meterX, peakY - 1, meterWidth, 2);
 
       // Peak Value Text
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
       ctx.font = '9px monospace';
       ctx.fillStyle = meter.peakHold >= -0.1 ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
       const textPeak = Math.max(MIN_DB, meter.peakHold).toFixed(1);
-      ctx.fillText(textPeak, meterX + meterWidth / 2, meterTop - 2);
+      ctx.fillText(textPeak, dimensions.width - 4, meterTop - 2);
 
       frameId = requestAnimationFrame(draw);
     };
@@ -650,9 +681,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             // Y delta changes Q
             const yDelta = e.movementY;
             const newNode = { ...newNodes[activeNodeIdx] };
-            newNode.q = Math.max(0.1, Math.min(40, newNode.q - yDelta * 0.1));
-            
-            newNodes[activeNodeIdx] = newNode;
+            if (newNode.type === 'peaking') {
+                newNode.q = Math.max(0.1, Math.min(40, newNode.q - yDelta * 0.1));
+                newNodes[activeNodeIdx] = newNode;
+            }
         } else {
             const newNode = { ...newNodes[activeNodeIdx] };
             let finalFreq = newFreq;
@@ -661,14 +693,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 finalFreq = Math.max(newNode.minFreq, Math.min(newNode.maxFreq, finalFreq));
             }
             
-            // Only update gain if it's not a highpass/lowpass (which usually fix gain at 0)
-            if (newNode.type !== 'highpass' && newNode.type !== 'lowpass') {
-              let finalGain = newGain;
-              if (newNode.minGain !== undefined && newNode.maxGain !== undefined) {
-                  finalGain = Math.max(newNode.minGain, Math.min(newNode.maxGain, finalGain));
-              }
-              newNode.gain = finalGain;
+            let finalGain = newGain;
+            if (newNode.minGain !== undefined && newNode.maxGain !== undefined) {
+                finalGain = Math.max(newNode.minGain, Math.min(newNode.maxGain, finalGain));
             }
+            newNode.gain = finalGain;
             
             newNode.freq = finalFreq;
             
@@ -716,10 +745,26 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       e.preventDefault();
       const newNodes = [...userNodes];
       const newNode = { ...newNodes[idx] };
-      newNode.q = Math.max(0.1, Math.min(40, newNode.q + Math.sign(e.deltaY) * 0.5));
-      
-      newNodes[idx] = newNode;
-      onNodesChange(newNodes);
+      if (newNode.type === 'peaking') {
+          const sensitivity = e.shiftKey ? SCROLL_SENSITIVITY_FINE : SCROLL_SENSITIVITY_NORMAL;
+          
+          if (Math.sign(e.deltaY) > 0) {
+              newNode.q = newNode.q * sensitivity;
+          } else if (Math.sign(e.deltaY) < 0) {
+              newNode.q = newNode.q / sensitivity;
+          }
+          
+          newNode.q = Math.max(MIN_Q, Math.min(MAX_Q, newNode.q));
+          
+          newNodes[idx] = newNode;
+          onNodesChange(newNodes);
+      }
+  };
+
+  const handleGlobalWheel = (e: React.WheelEvent) => {
+      if (activeNodeIdx !== null) {
+          handleWheel(e as any, activeNodeIdx);
+      }
   };
 
   return (
@@ -729,6 +774,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       onPointerMove={activeNodeIdx !== null ? handlePointerMove : undefined}
       onPointerUp={activeNodeIdx !== null ? handlePointerUp : undefined}
       onPointerLeave={activeNodeIdx !== null ? handlePointerUp : undefined}
+      onWheel={handleGlobalWheel}
     >
       <canvas
         ref={canvasRef}
@@ -747,6 +793,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const isActive = activeNodeIdx === idx;
         const isBypassed = node.enabled === false;
         const isBoost = node.gain >= 0;
+        
+        const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
 
         return (
           <div
@@ -783,16 +831,18 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             </div>
 
             {/* Q-width indicator */}
-            <div 
-              className={cn(
-                  "absolute h-[2px] rounded-full pointer-events-none transition-all hidden",
-                  isActive && "block",
-              )}
-              style={{ 
-                  width: `${visualWidth}px`,
-                  backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
-              }}
-            />
+            {!isShelf && (
+              <div 
+                className={cn(
+                    "absolute h-[2px] rounded-full pointer-events-none transition-all hidden",
+                    isActive && "block",
+                )}
+                style={{ 
+                    width: `${visualWidth}px`,
+                    backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
+                }}
+              />
+            )}
             
             {/* Hover / Active Tooltip */}
             <div 
@@ -886,13 +936,37 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                             <Headphones size={12} />
                         </button>
                     </div>
+                    <div className="flex w-full px-1">
+                        <select
+                            className="w-full bg-slate-800 text-slate-300 rounded px-1 py-1 text-[10px] font-mono border border-slate-700 outline-none hover:bg-slate-700 cursor-pointer"
+                            value={node.type}
+                            onChange={(e) => {
+                                const newNodes = [...userNodes];
+                                const type = e.target.value as any;
+                                newNodes[idx] = { ...node, type };
+                                
+                                if (type === 'lowshelf' || type === 'highshelf') {
+                                    newNodes[idx].q = 1.0;
+                                } else {
+                                    newNodes[idx].q = Math.max(0.1, Math.min(40, newNodes[idx].q));
+                                }
+                                onNodesChange(newNodes);
+                            }}
+                        >
+                            <option value="peaking">Bell (Peaking)</option>
+                            <option value="lowshelf">Low Shelf</option>
+                            <option value="highshelf">High Shelf</option>
+                        </select>
+                    </div>
                     <div className="flex items-center justify-between px-1 gap-4 text-[10px] tracking-wider text-slate-400">
                         <span className={isBoost ? "text-yellow-400" : "text-sky-400"}>
                             {node.gain > 0 ? '+' : ''}{node.gain.toFixed(2)} dB
                         </span>
-                        <span>
-                            Q: {effectiveQ.toFixed(2)}
-                        </span>
+                        {!isShelf && (
+                            <span>
+                                Q: {effectiveQ.toFixed(2)}
+                            </span>
+                        )}
                     </div>
                 </div>
                 {/* Triangle pointing down */}

@@ -280,10 +280,17 @@ export class AudioEngine {
     const filters = nodes.map(data => {
       const f = this.ctx.createBiquadFilter();
       const isBypassed = data.enabled === false;
-      f.type = isBypassed ? 'peaking' : data.type;
+      const type = isBypassed ? 'peaking' : data.type;
+      f.type = type;
       f.frequency.value = data.freq;
-      f.gain.value = isBypassed ? 0 : data.gain;
-      f.Q.value = data.q;
+      
+      if (type === 'lowshelf' || type === 'highshelf') {
+        f.gain.value = isBypassed ? 0 : data.gain;
+        f.Q.value = 1.0; 
+      } else {
+        f.gain.value = isBypassed ? 0 : data.gain;
+        f.Q.value = data.q;
+      }
       // Optimize out zipper noise on drag
       return f;
     });
@@ -340,12 +347,19 @@ export class AudioEngine {
       nodes.forEach((n, i) => {
         const filter = this.userFilters[i];
         const isBypassed = n.enabled === false;
-        filter.type = isBypassed ? 'peaking' : n.type;
+        const type = isBypassed ? 'peaking' : n.type;
+        filter.type = type;
         // Direct assignment ensures instant getFrequencyResponse math and UI visual sync 
         // without relying on Web Audio clock progression (which might fail if suspended)
         filter.frequency.value = n.freq;
-        filter.gain.value = isBypassed ? 0 : n.gain;
-        filter.Q.value = n.q;
+        
+        if (type === 'lowshelf' || type === 'highshelf') {
+          filter.gain.value = isBypassed ? 0 : n.gain;
+          filter.Q.value = 1.0; 
+        } else {
+          filter.gain.value = isBypassed ? 0 : n.gain;
+          filter.Q.value = n.q;
+        }
       });
       this.calculateAutoMakeupGain(false);
     } else {

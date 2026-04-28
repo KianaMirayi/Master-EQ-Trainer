@@ -6,9 +6,10 @@ import { cn } from '../lib/utils';
 interface WaveformPlayerProps {
   engine: AudioEngine;
   isLoadingTrack?: boolean;
+  trackName?: string;
 }
 
-export function WaveformPlayer({ engine, isLoadingTrack }: WaveformPlayerProps) {
+export function WaveformPlayer({ engine, isLoadingTrack, trackName }: WaveformPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(engine.isPlaying);
@@ -194,7 +195,12 @@ export function WaveformPlayer({ engine, isLoadingTrack }: WaveformPlayerProps) 
   };
 
   return (
-    <div className="flex flex-col gap-2 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+    <div className="flex flex-col gap-1 bg-slate-900/50 px-3 pb-3 pt-2 rounded-lg border border-slate-800">
+      {trackName && (
+          <div className="text-sm font-sans font-bold italic tracking-wide text-slate-100 px-1 mb-1 truncate">
+              {trackName}
+          </div>
+      )}
       <div className="flex items-center gap-4">
         <button 
             onClick={togglePlay}

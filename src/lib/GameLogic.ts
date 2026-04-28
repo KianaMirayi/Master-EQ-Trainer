@@ -43,16 +43,32 @@ export function generateTargetForLevel(level: number): EQNodeData[] {
     const fRandomLog = effLogMin + Math.random() * (effLogMax - effLogMin);
     const freq = Math.pow(10, fRandomLog);
     
+    // Determine type 
+    let type: BiquadFilterType = 'peaking';
+    
+    if (level >= 4) {
+        // Shelf filters can still exist in multi-band levels at the outer edges
+        const rand = Math.random();
+        if (i === 0) {
+            if (rand < 0.3) type = 'lowshelf';
+        } else if (i === bandCount - 1 && bandCount > 1) {
+            if (rand < 0.3) type = 'highshelf';
+        }
+    }
+    
     // Gain +/- 4 to 8 (stays clearly within the 3 to 9 hint intervals)
     const sign = Math.random() > 0.5 ? 1 : -1;
     const gain = sign * (4 + Math.floor(Math.random() * 5)); 
     
+    // For shelf, fix to 1.0. For peering, use the randomized q.
+    const effectiveQ = (type === 'lowshelf' || type === 'highshelf') ? 1.0 : q;
+
     nodes.push({
       id: `target_lvl${level}_b${i}`,
-      type: 'peaking',
+      type,
       freq,
       gain,
-      q
+      q: effectiveQ
     });
   }
 
@@ -95,10 +111,10 @@ export function generateUserInitial(targets: EQNodeData[], level: number): EQNod
 
     return {
       id: `user_b${idx}`,
-      type: t.type,
+      type: 'peaking' as BiquadFilterType,
       freq: startFreq,
       gain: 0, 
-      q: t.q,
+      q: 1.0,
       minFreq: minF,
       maxFreq: maxF,
       minGain: -9, // The max absolute gain to bound

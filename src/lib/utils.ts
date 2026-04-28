@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Global Audio Constants
 export const MIN_FREQ = 20;
-export const MAX_FREQ = 30000;
+export const MAX_FREQ = 20000;
 export const MAX_GAIN = 12; // visually allow up to +-12dB
 export const TARGET_GAIN_LIMIT = 12;
 
@@ -42,7 +42,10 @@ export function calculateDynamicMinQ(freq: number, gain: number, minFreq?: numbe
   return Math.min(40, Math.max(0.1, qLeft, qRight));
 }
 
-export function calculateFrequencyLimits(q: number, gain: number, minFreq: number = MIN_FREQ, maxFreq: number = MAX_FREQ, maxSpillDb = MAX_SPILL_DB) {
+export function calculateFrequencyLimits(type: BiquadFilterType, q: number, gain: number, minFreq: number = MIN_FREQ, maxFreq: number = MAX_FREQ, maxSpillDb = MAX_SPILL_DB) {
+  if (type !== 'peaking') {
+      return { min: minFreq, max: maxFreq };
+  }
   if (Math.abs(gain) <= maxSpillDb) {
       return { min: minFreq, max: maxFreq };
   }
@@ -144,10 +147,20 @@ export function calculateMatchScore(userNodes: EQNodeData[], targetNodes: EQNode
     // Q error
     // If bypassed, Q doesn't matter, but let's just use it
     const distQ = Math.abs(u.q - t.q);
-    const scoreQ = Math.max(0, 1 - distQ / 2); // 2 Q-off is 0 points
+    let scoreQ = Math.max(0, 1 - distQ / 2); // 2 Q-off is 0 points
+    
+    // Type error
+    let typeMultiplier = 1.0;
+    if (u.type !== t.type) {
+        typeMultiplier = 0.0; // 0 score if type is wrong
+    }
 
-
-    totalScore += (scoreF * 0.5 + scoreG * 0.35 + scoreQ * 0.15); // Weights
+    // Ignore gain/Q scoring if the filter doesn't use it or uses fixed value
+    if (t.type === 'lowshelf' || t.type === 'highshelf') {
+      totalScore += (scoreF * 0.6 + scoreG * 0.4) * typeMultiplier; 
+    } else {
+      totalScore += (scoreF * 0.5 + scoreG * 0.35 + scoreQ * 0.15) * typeMultiplier; // Weights
+    }
   }
   
   return Math.max(0, Math.round((totalScore / userNodes.length) * 100));
