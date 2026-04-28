@@ -20,4 +20,13 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: #475569;
   }
+  
+  .hide-spinners::-webkit-outer-spin-button,
+  .hide-spinners::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .hide-spinners[type=number] {
+    -moz-appearance: textfield;
+  }
 }

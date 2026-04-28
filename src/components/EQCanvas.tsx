@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Power, Headphones } from 'lucide-react';
+import { Power, Headphones, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { EQNodeData, freqToX, xToFreq, gainToY, yToGain, cn } from '../lib/utils';
 import { AudioEngine } from '../lib/AudioEngine';
 
@@ -30,6 +31,12 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [activeNodeIdx, setActiveNodeIdx] = useState<number | null>(null);
   const [hoveredNodeIdx, setHoveredNodeIdx] = useState<number | null>(null);
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
+  
+  const [editingFreqNodeIdx, setEditingFreqNodeIdx] = useState<number | null>(null);
+  const [editingFreqValue, setEditingFreqValue] = useState<string>('');
+  const [freqErrorMsg, setFreqErrorMsg] = useState<string | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleMouseEnterNode = (idx: number) => {
@@ -49,9 +56,51 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }, 2000); // 2 second delay
   };
 
+  const closeEdit = useCallback(() => {
+      setEditingFreqNodeIdx(null);
+      setFreqErrorMsg(null);
+      if (errorTimeoutRef.current) {
+          clearTimeout(errorTimeoutRef.current);
+          errorTimeoutRef.current = null;
+      }
+  }, []);
+
+  const clearFreqError = useCallback(() => {
+      setFreqErrorMsg(null);
+      if (errorTimeoutRef.current) {
+          clearTimeout(errorTimeoutRef.current);
+          errorTimeoutRef.current = null;
+      }
+  }, []);
+
+  const handleFreqEditSubmit = (idx: number) => {
+      const val = parseFloat(editingFreqValue);
+      if (isNaN(val)) {
+          closeEdit();
+          return;
+      }
+      const node = userNodes[idx];
+      const minF = node.minFreq !== undefined ? node.minFreq : 20;
+      const maxF = node.maxFreq !== undefined ? node.maxFreq : 20000;
+      
+      if (val < minF || val > maxF) {
+          setFreqErrorMsg("输入的频率超过了频段范围");
+          if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+          errorTimeoutRef.current = setTimeout(() => {
+              setFreqErrorMsg(null);
+          }, 2000);
+          return;
+      }
+      const newNodes = [...userNodes];
+      newNodes[idx] = { ...newNodes[idx], freq: val };
+      onNodesChange(newNodes);
+      closeEdit();
+  };
+
   // References for temporal envelope smoothing
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
+  const meterPeakRef = useRef<{ rms: number, peak: number, peakHold: number, peakHoldFrames: number }>({ rms: -100, peak: -100, peakHold: -100, peakHoldFrames: 0 });
 
   const userNodesRef = useRef(userNodes);
   useEffect(() => {
@@ -92,23 +141,44 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       };
 
       // Vertical lines (Frequencies)
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
       FREQ_TICKS.forEach(freq => {
+        const isHighlight = [20, 200, 2000, 20000].includes(freq);
         const x = freqToX(freq) * dimensions.width;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        
+        ctx.strokeStyle = isHighlight ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = isHighlight ? 2 : 1;
+        
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dimensions.height);
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.fillText(FREQ_LABELS[freq], x, dimensions.height - 4);
+        ctx.fillStyle = isHighlight ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.4)';
+        if (isHighlight) {
+            ctx.font = 'bold 11px monospace';
+        } else {
+            ctx.font = '10px monospace';
+        }
+        
+        let textX = x;
+        if (freq === 20) {
+            ctx.textAlign = 'left';
+            textX = x + 12; // Push far enough inward from left rounded corner
+        } else if (freq === 30000 || (freq === 20000 && x > dimensions.width - 25)) {
+            ctx.textAlign = 'right';
+            textX = x - 25; // Push away from meter and right edge
+        } else {
+            ctx.textAlign = 'center';
+        }
+
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8); // Push up from bottom edge
       });
+
+      ctx.font = '10px monospace'; // Reset font for horizontal lines
 
       // Horizontal lines (Gain)
       ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
       const GAIN_TICKS = [12, 9, 6, 3, 0, -3, -6, -9, -12];
       GAIN_TICKS.forEach(gain => {
         const y = gainToY(gain) * dimensions.height;
@@ -125,18 +195,41 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         ctx.stroke();
 
         // Outer Gain Label
+        let textY = y;
+        if (gain === 12) {
+            ctx.textBaseline = 'top';
+            textY = y + 12; // Push down from top rounded corner
+        } else if (gain === -12) {
+            ctx.textBaseline = 'bottom';
+            textY = y - 12; // Push up from bottom rounded corner
+        } else {
+            ctx.textBaseline = 'middle';
+        }
+
         ctx.fillStyle = gain === 0 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(255, 255, 255, 0.4)';
-        ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 6, y);
+        ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 22, textY);
       });
 
       // Spectrum Amplitude Labels
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
       const AMP_TICKS = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90];
       AMP_TICKS.forEach(amp => {
         const normalizedDb = Math.max(0, Math.min(1, (amp - (-100)) / (0 - (-100))));
-        const y = dimensions.height - normalizedDb * dimensions.height;
+        let y = dimensions.height - normalizedDb * dimensions.height;
+        
+        if (amp === 0) {
+            ctx.textBaseline = 'top';
+            y = y + 12; // Push down from top edge
+        } else if (amp === -90) {
+            ctx.textBaseline = 'bottom';
+            y = Math.min(y, dimensions.height - 18); // Push up from bottom edge, avoid frequency labels
+        } else {
+            ctx.textBaseline = 'middle';
+        }
+
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillText(`${amp}`, dimensions.width - 40, y);
+        ctx.fillText(`${amp}`, 12, y); // Push right from left edge
       });
 
       // --- Draw Global Gain Hints ---
@@ -418,6 +511,66 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }
       drawCurve(false, '#eab308'); // Main curve yellow
 
+      // --- Draw Master Level Meter ---
+      const levels = engine.getMasterLevel();
+      const meter = meterPeakRef.current;
+      
+      meter.rms = Math.max(levels.rms, meter.rms - 1.5);
+      
+      if (levels.peak > meter.peak) {
+          meter.peak = levels.peak;
+          meter.peakHold = levels.peak;
+          meter.peakHoldFrames = 60; // 1 second hold
+      } else {
+          meter.peak = Math.max(levels.peak, meter.peak - 1.5);
+          if (meter.peakHoldFrames > 0) {
+              meter.peakHoldFrames--;
+          } else {
+              meter.peakHold = Math.max(levels.peak, meter.peakHold - 0.5);
+          }
+      }
+
+      const meterWidth = 6;
+      const meterX = dimensions.width - 12;
+      const meterTop = 15;
+      const meterHeight = dimensions.height - 30;
+      
+      const MIN_DB = -60;
+      const MAX_DB = 0;
+      const dbToMeterY = (db: number) => {
+          const clamped = Math.max(MIN_DB, Math.min(MAX_DB, db));
+          const normalized = (clamped - MIN_DB) / (MAX_DB - MIN_DB);
+          return meterTop + meterHeight * (1 - normalized);
+      };
+
+      // Meter BG
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(meterX, meterTop, meterWidth, meterHeight);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeRect(meterX, meterTop, meterWidth, meterHeight);
+
+      // Meter Fill (RMS)
+      const rmsY = dbToMeterY(meter.rms);
+      const gradient = ctx.createLinearGradient(0, meterTop + meterHeight, 0, meterTop);
+      gradient.addColorStop(0, '#22c55e');
+      gradient.addColorStop(0.75, '#eab308');
+      gradient.addColorStop(1, '#ef4444');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(meterX, rmsY, meterWidth, (meterTop + meterHeight) - rmsY);
+
+      // Peak Hold Line
+      const peakY = dbToMeterY(meter.peakHold);
+      ctx.fillStyle = meter.peakHold >= -0.1 ? '#ef4444' : '#ffffff';
+      ctx.fillRect(meterX, peakY - 1, meterWidth, 2);
+
+      // Peak Value Text
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = '9px monospace';
+      ctx.fillStyle = meter.peakHold >= -0.1 ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
+      const textPeak = Math.max(MIN_DB, meter.peakHold).toFixed(1);
+      ctx.fillText(textPeak, meterX + meterWidth / 2, meterTop - 2);
+
       frameId = requestAnimationFrame(draw);
     };
 
@@ -518,7 +671,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   return (
     <div 
       ref={containerRef}
-      className={cn("relative w-full h-full bg-slate-900 overflow-hidden cursor-crosshair rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      className={cn("relative w-full h-full bg-slate-900 overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
       onPointerMove={activeNodeIdx !== null ? handlePointerMove : undefined}
       onPointerUp={activeNodeIdx !== null ? handlePointerUp : undefined}
       onPointerLeave={activeNodeIdx !== null ? handlePointerUp : undefined}
@@ -611,9 +764,62 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                         >
                             <Power size={12} />
                         </button>
-                        <span className="flex-1 text-center font-semibold text-[11px] tracking-wide">
-                            {node.freq < 1000 ? node.freq.toFixed(2) : (node.freq/1000).toFixed(2) + 'k'} Hz
-                        </span>
+                        {editingFreqNodeIdx === idx ? (
+                            <div className="flex-1 relative flex items-center justify-center">
+                                <input
+                                    type="number"
+                                    autoFocus
+                                    className="w-14 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:_textfield] bg-slate-800 text-white text-center rounded px-1 py-0.5 outline-none text-[11px] font-mono border border-cyan-500/50"
+                                    value={editingFreqValue}
+                                    onChange={(e) => setEditingFreqValue(e.target.value)}
+                                    // Make sure it doesn't close edit immediately if they click the X button,
+                                    // We can just rely on closeEdit from onBlur, but to allow clicking X, check relatedTarget
+                                    onBlur={(e) => {
+                                        if (e.relatedTarget && (e.relatedTarget as HTMLElement).closest('.freq-error-close')) {
+                                            return; // handled by onClick
+                                        }
+                                        closeEdit();
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleFreqEditSubmit(idx);
+                                        if (e.key === 'Escape') closeEdit();
+                                    }}
+                                />
+                                <AnimatePresence>
+                                    {freqErrorMsg && (
+                                        <motion.div 
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-800/95 text-red-400 text-[10px] pl-2 pr-1 py-1 rounded flex items-center gap-1.5 shadow-lg pointer-events-auto z-[60] border border-red-500/30 whitespace-nowrap backdrop-blur-sm"
+                                        >
+                                            <span>{freqErrorMsg}</span>
+                                            <button 
+                                                className="freq-error-close hover:bg-red-500/20 text-red-500 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                                                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); closeEdit(); }}
+                                            >
+                                                <X size={10} />
+                                            </button>
+                                            <div className="absolute right-full top-1/2 -translate-y-1/2 border-solid border-r-slate-800 border-r-[4px] border-y-transparent border-y-[4px] border-l-0"></div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        ) : (
+                            <span 
+                                className="flex-1 text-center font-semibold text-[11px] tracking-wide cursor-text hover:text-white transition-colors px-1 rounded hover:bg-slate-700"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingFreqNodeIdx(idx);
+                                    setEditingFreqValue(node.freq.toFixed(1));
+                                    clearFreqError();
+                                }}
+                                title="Click to edit frequency"
+                            >
+                                {node.freq < 10000 ? node.freq.toFixed(1) : (node.freq/1000).toFixed(1) + 'k'} Hz
+                            </span>
+                        )}
                         <button
                             onPointerDown={(e) => handleListenPointerDown(e, idx)}
                             className={cn(

@@ -21,6 +21,7 @@ export class AudioEngine {
 
   targetAnalyser: AnalyserNode;
   userAnalyser: AnalyserNode;
+  masterAnalyser: AnalyserNode;
 
   isPlaying = false;
   isLooping = true;
@@ -45,7 +46,12 @@ export class AudioEngine {
 
     this.masterGain = this.ctx.createGain();
     this.masterGain.connect(this.compressor);
-    this.compressor.connect(this.ctx.destination);
+    
+    this.masterAnalyser = this.ctx.createAnalyser();
+    this.masterAnalyser.fftSize = 256;
+    this.masterAnalyser.smoothingTimeConstant = 0.8;
+    this.compressor.connect(this.masterAnalyser);
+    this.masterAnalyser.connect(this.ctx.destination);
     
     // Listen paths
     this.targetGain = this.ctx.createGain();
@@ -445,5 +451,26 @@ export class AudioEngine {
         outDb[i] = 20 * Math.log10(totalMag[i] || 1);
     }
     return outDb;
+  }
+
+  getMasterLevel(): { rms: number, peak: number } {
+    if (!this.isPlaying) return { rms: -100, peak: -100 };
+    const data = new Float32Array(this.masterAnalyser.fftSize);
+    this.masterAnalyser.getFloatTimeDomainData(data);
+    
+    let sum = 0;
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+        const val = data[i];
+        sum += val * val;
+        if (Math.abs(val) > peak) peak = Math.abs(val);
+    }
+    
+    const rms = Math.sqrt(sum / data.length);
+    
+    return {
+        rms: rms > 0 ? 20 * Math.log10(rms) : -100,
+        peak: peak > 0 ? 20 * Math.log10(peak) : -100
+    };
   }
 }
