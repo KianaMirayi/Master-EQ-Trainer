@@ -644,6 +644,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         
         if (isTarget || isPureStereo) {
             // Fast Path: Pure Stereo
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = color;
             ctx.lineWidth = 2.5;
             ctx.strokeStyle = color;
             ctx.beginPath();
@@ -654,6 +656,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
+            ctx.shadowBlur = 0;
         } else {
             // Advanced Path: M/S Delta Fusion
             const MERGE_THRESHOLD = 0.5;
@@ -710,6 +713,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             }
 
             // Draw Side Curve (Bottom-most)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = `rgba(59, 130, 246, ${sideBaseAlpha})`;
             ctx.lineWidth = sideLineWidth;
             ctx.strokeStyle = sideGradient;
             ctx.beginPath();
@@ -722,6 +727,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             ctx.stroke();
 
             // Draw Mid Curve
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = `rgba(34, 197, 94, ${midBaseAlpha})`;
             ctx.lineWidth = midLineWidth;
             ctx.strokeStyle = midGradient;
             ctx.beginPath();
@@ -732,6 +739,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
+            ctx.shadowBlur = 0;
         }
         ctx.restore();
 
