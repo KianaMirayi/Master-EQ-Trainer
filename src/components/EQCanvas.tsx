@@ -10,6 +10,15 @@ const MAX_Q = 40.0;
 const SCROLL_SENSITIVITY_NORMAL = 1.05;
 const SCROLL_SENSITIVITY_FINE = 1.01;
 
+// ==========================================
+// DEFAULT PANEL POSITION SETTINGS
+// - DEFAULT_PANEL_FREQ: The initial center position (in Hz) on the visualizer.
+//   Change this value (e.g. 100, 600, 1000) to move the initial default position left or right.
+// - You can also change the `bottom-6` class in the JSX (search for `w-[480px]`) 
+//   to `bottom-12`, `bottom-[100px]`, etc. to adjust vertical padding.
+// ==========================================
+export const DEFAULT_PANEL_FREQ = 280;
+
 
 interface EQCanvasProps {
   engine: AudioEngine;
@@ -19,6 +28,27 @@ interface EQCanvasProps {
   showTarget: boolean;
 }
 
+// ==========================================
+// SPECTRUM COLOR SETTINGS
+// Modify these to change the spectrum analyzer waveforms in blind test / main view
+// ==========================================
+export const USER_SPECTRUM_FILL_COLOR = 'rgba(255, 229, 185, 0.15)';   // Cyan transparent fill
+export const USER_SPECTRUM_STROKE_COLOR = 'rgba(255, 229, 185, 0.3)';  // Cyan stroke
+
+export const TARGET_SPECTRUM_FILL_COLOR = 'rgba(168, 85, 247, 0.4)'; // Purple transparent fill
+export const TARGET_SPECTRUM_STROKE_COLOR = undefined;               // undefined means no stroke by default
+
+// ==========================================
+// TARGET GAIN RANGE HINTS COLORS
+// The colors for the horizontal shaded background areas indicating target gain regions
+// ==========================================
+export const TARGET_HINT_GAIN_TOP_COLOR = 'rgba(79, 159, 186, 0.1)';  // Boost area (default: yellow)
+export const TARGET_HINT_GAIN_BOT_COLOR = 'rgba(56, 189, 248, 0.1)'; // Cut area (default: blue)
+
+// ==========================================
+// EQ BAND COLORS
+// Used for the gain/attenuation bounds (under the EQ curve) and nodes
+// ==========================================
 export const BAND_COLORS = [
   '239, 68, 68',   // Red
   '249, 115, 22',  // Orange
@@ -117,12 +147,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
-  const [panelOffset, setPanelOffset] = useState<number>(0);
+  const [panelOffsets, setPanelOffsets] = useState<Record<number, number>>({});
   const isDraggingPanel = useRef(false);
-
-  useEffect(() => {
-    setPanelOffset(0);
-  }, [selectedNodeIdx]);
 
   const handlePanelPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
@@ -138,39 +164,46 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     // Compute current bounds
     const node = userNodes[selectedNodeIdx];
     if (!node) return;
-    const nodeX = freqToX(node.freq) * dimensions.width;
     const panelHalfWidth = 240;
     const minX = panelHalfWidth + 10;
     const maxX = dimensions.width > 0 ? dimensions.width - panelHalfWidth - 10 : panelHalfWidth + 10;
     
-    let baseLeft = dimensions.width / 2;
-    if (!isNaN(nodeX) && dimensions.width > 0) {
-        const ratio = Math.max(0, Math.min(1, nodeX / dimensions.width));
-        // Linear interpolation ensures panel offsets appropriately relative to node
-        baseLeft = minX + ratio * (maxX - minX);
-    }
+    // Default position
+    let baseLeft = freqToX(DEFAULT_PANEL_FREQ) * dimensions.width;
+    baseLeft = Math.max(minX, Math.min(baseLeft, maxX));
+    if (dimensions.width === 0) baseLeft = 0;
     
     e.preventDefault();
     isDraggingPanel.current = true;
     const startX = e.clientX;
-    const startOffset = panelOffset;
+    const startOffset = panelOffsets[selectedNodeIdx] || 0;
+    
+    // We don't need pointer capture if we use window events, but we can do both just in case
+    // For safer behavior across all browsers, window events work best.
     
     const onMove = (moveEv: PointerEvent) => {
         if (!isDraggingPanel.current) return;
         const requestedOffset = startOffset + (moveEv.clientX - startX);
         const requestedLeft = baseLeft + requestedOffset;
-        const clampedLeft = Math.max(minX, Math.min(requestedLeft, maxX));
-        setPanelOffset(clampedLeft - baseLeft);
+        let clampedLeft = Math.max(minX, Math.min(requestedLeft, maxX));
+        if (dimensions.width === 0) clampedLeft = requestedLeft;
+        
+        setPanelOffsets(prev => ({
+            ...prev,
+            [selectedNodeIdx]: clampedLeft - baseLeft
+        }));
     };
     
-    const onUp = () => {
+    const onUp = (upEv: PointerEvent) => {
         isDraggingPanel.current = false;
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
     };
     
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
   
   const [editingFreqNodeIdx, setEditingFreqNodeIdx] = useState<number | null>(null);
@@ -391,10 +424,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       const yBot1 = gainToY(-3) * dimensions.height;
       const yBot2 = gainToY(-9) * dimensions.height;
       
-      ctx.fillStyle = 'rgba(234, 179, 8, 0.05)';
+      ctx.fillStyle = TARGET_HINT_GAIN_TOP_COLOR;
       ctx.fillRect(0, yTop1, dimensions.width, yTop2 - yTop1);
       
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.05)';
+      ctx.fillStyle = TARGET_HINT_GAIN_BOT_COLOR;
       ctx.fillRect(0, yBot1, dimensions.width, yBot2 - yBot1);
       
       // Draw borders for the global gain hints
@@ -571,14 +604,14 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const targetBinCount = engine.targetAnalyser.frequencyBinCount;
         const targetFftData = new Float32Array(targetBinCount);
         engine.targetAnalyser.getFloatFrequencyData(targetFftData);
-        drawSpectrum(targetFftData, 'rgba(168, 85, 247, 0.4)', targetEnvelopeRef); // Target: Purple base
+        drawSpectrum(targetFftData, TARGET_SPECTRUM_FILL_COLOR, targetEnvelopeRef, TARGET_SPECTRUM_STROKE_COLOR);
       }
       
       // User Spectrum
       const userBinCount = engine.userAnalyser.frequencyBinCount;
       const userFftData = new Float32Array(userBinCount);
       engine.userAnalyser.getFloatFrequencyData(userFftData);
-      drawSpectrum(userFftData, 'rgba(6, 182, 212, 0.15)', userEnvelopeRef, 'rgba(6, 182, 212, 0.3)'); // User: Cyan
+      drawSpectrum(userFftData, USER_SPECTRUM_FILL_COLOR, userEnvelopeRef, USER_SPECTRUM_STROKE_COLOR);
 
       // --- Draw EQ curves ---
       const drawCurve = (isTarget: boolean, color: string, dashes: number[] = []) => {
@@ -830,7 +863,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   return (
     <div 
       ref={containerRef}
-      className={cn("relative w-full h-full bg-slate-900 overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      className={cn("relative w-full h-full bg-[#040912] overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
         setOpenDropdown('none');
@@ -1104,16 +1137,17 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             const minX = panelHalfWidth + 10;
             const maxX = dimensions.width > 0 ? dimensions.width - panelHalfWidth - 10 : panelHalfWidth + 10;
             
-            let baseLeft = dimensions.width / 2;
-            if (!isNaN(nodeX) && dimensions.width > 0) {
-                const ratio = Math.max(0, Math.min(1, nodeX / dimensions.width));
-                baseLeft = minX + ratio * (maxX - minX);
-            }
+            // Default position
+            let baseLeft = freqToX(DEFAULT_PANEL_FREQ) * dimensions.width;
+            baseLeft = Math.max(minX, Math.min(baseLeft, maxX));
+            if (dimensions.width === 0) baseLeft = 0;
 
             const minF = node.minFreq !== undefined ? node.minFreq : 20;
             const maxF = node.maxFreq !== undefined ? node.maxFreq : 20000;
             const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
             const colorStr = `rgb(${BAND_COLORS[selectedNodeIdx % BAND_COLORS.length]})`;
+            
+            const currentPanelOffset = panelOffsets[selectedNodeIdx] || 0;
 
             return (
               <motion.div
@@ -1121,15 +1155,21 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 20, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute bottom-6 bg-gradient-to-b from-[#252830] to-[#181a1f] border border-slate-700/40 rounded-[32px] pl-6 pr-4 py-5 flex items-stretch gap-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto cursor-grab active:cursor-grabbing"
-                  style={{ left: baseLeft + panelOffset, transform: 'translateX(-50%)' }}
+                  className="absolute bottom-6 w-[480px] bg-gradient-to-b from-[#252830]/70 to-[#181a1f]/70 backdrop-blur-md border border-slate-700/40 rounded-[32px] px-6 pb-5 pt-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto cursor-default"
+                  style={{ left: baseLeft + currentPanelOffset, transform: 'translateX(-50%)' }}
                   onPointerDown={handlePanelPointerDown}
                   onWheel={(e) => e.stopPropagation()}
                   onDoubleClick={(e) => e.stopPropagation()}
               >
                       <>
-                          {/* Left Panel UI Mockup */}
-                          <div className="flex flex-col justify-between items-start py-2 relative z-10">
+                          {/* Drag Handle Top Bar */}
+                          <div 
+                              className="absolute top-0 left-0 right-0 h-8 cursor-grab active:cursor-grabbing z-50 flex items-center justify-center hover:bg-white/[0.02] rounded-t-[32px] transition-colors"
+                              onPointerDown={handlePanelPointerDown}
+                          />
+                          <div className="flex items-stretch justify-between w-full relative">
+                              {/* Left Panel UI Mockup */}
+                              <div className="flex flex-col justify-between items-start py-2 relative z-10 w-[80px]">
                               {/* Power Button */}
                               <button 
                                   className={cn(
@@ -1200,7 +1240,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                           </div>
 
                           {/* Knobs Section */}
-                          <div className="flex items-end gap-6 relative px-2">
+                          <div className="flex items-end justify-center gap-6 relative px-2 shrink-0">
                               {/* Glowing background top indicator behind gain */}
                               <div 
                                   className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-6 w-32 h-16 pointer-events-none rounded-[100%] opacity-15 blur-2xl"
@@ -1263,7 +1303,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                           </div>
 
                           {/* Right Panel UI Mockup */}
-                          <div className="flex flex-col justify-between items-end pl-2 py-2">
+                          <div className="flex flex-col justify-between items-end py-2 w-[80px]">
                               <div className="flex items-center gap-3">
                                   <div className="flex items-center gap-1.5 text-slate-400 bg-[#1e2027] px-2 py-1 rounded-full border border-[#2a2d36] text-[10px] font-mono">
                                       <ChevronLeft 
@@ -1346,6 +1386,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                           </AnimatePresence>
                                       </div>
                               </div>
+                          </div>
                           </div>
                       </>
                   </motion.div>
