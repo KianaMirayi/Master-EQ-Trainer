@@ -648,15 +648,17 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         }
 
         let isPureStereo = true;
-        if (!isTarget) {
+        if (isTarget && targetNodes) {
+            isPureStereo = !targetNodes.some(node => (node.stereoMode === 'Mid' || node.stereoMode === 'Side'));
+        } else if (!isTarget) {
             isPureStereo = !latestNodes.some(node => node.enabled !== false && (node.stereoMode === 'Mid' || node.stereoMode === 'Side'));
         }
 
         // --- LAYER 1: Global Curves ---
         ctx.save();
-        ctx.setLineDash(dashes);
         
-        if (isTarget || isPureStereo) {
+        if (!isTarget && isPureStereo) {
+            ctx.setLineDash(dashes);
             // Fast Path: Pure Stereo
             ctx.lineWidth = 2.5 * 2.5; 
             ctx.globalAlpha = 0.25;
@@ -680,6 +682,58 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
+        } else if (isTarget) {
+            ctx.setLineDash(dashes);
+            
+            if (isPureStereo) {
+                 // Fast Path: Pure Stereo for Target (Original Style with glow)
+                 ctx.lineWidth = 2.5 * 2.5; 
+                 ctx.globalAlpha = 0.25;
+                 ctx.strokeStyle = color;
+                 ctx.beginPath();
+                 for (let x = 0; x < dimensions.width; x++) {
+                     const db = midResponse[x];
+                     const y = gainToY(db) * dimensions.height;
+                     if (x === 0) ctx.moveTo(x, y);
+                     else ctx.lineTo(x, y);
+                 }
+                 ctx.stroke();
+
+                 ctx.globalAlpha = 1.0;
+                 ctx.lineWidth = 2.5;
+                 ctx.beginPath();
+                 for (let x = 0; x < dimensions.width; x++) {
+                    const db = midResponse[x];
+                    const y = gainToY(db) * dimensions.height;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                 }
+                 ctx.stroke();
+            } else {
+                 ctx.lineWidth = 2.5;
+                 // Target M/S Path - distinct colors to visualize mid and side clearly
+                 // Draw Mid Curve
+                 ctx.strokeStyle = '#22c55e'; // Green for Target Mid
+                 ctx.beginPath();
+                 for (let x = 0; x < dimensions.width; x++) {
+                    const db = midResponse[x];
+                    const y = gainToY(db) * dimensions.height;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                 }
+                 ctx.stroke();
+                 
+                 // Draw Side Curve
+                 ctx.strokeStyle = '#3b82f6'; // Blue for Target Side
+                 ctx.beginPath();
+                 for (let x = 0; x < dimensions.width; x++) {
+                    const db = sideResponse[x];
+                    const y = gainToY(db) * dimensions.height;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                 }
+                 ctx.stroke();
+            }
         } else {
             // Advanced Path: M/S Delta Fusion
             const MERGE_THRESHOLD = 0.5;
@@ -1255,6 +1309,38 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 {/* Triangle pointing down */}
                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-solid border-t-[#2a2d36] border-t-[6px] border-x-transparent border-x-[6px] border-b-0"></div>
             </div>
+          </div>
+        );
+      })}
+
+      {/* Target Nodes Overlay (for review stage) */}
+      {showTarget && targetNodes && targetNodes.map((node, idx) => {
+        const xPos = freqToX(node.freq) * dimensions.width;
+        const yPos = gainToY(node.gain) * dimensions.height;
+        
+        return (
+          <div
+            key={`target-${node.id || idx}`}
+            style={{ 
+              left: `${xPos}px`, 
+              top: `${yPos}px`, 
+              transform: 'translate(-50%, -50%)',
+            }}
+            className="absolute z-10 w-4 h-4 flex items-center justify-center pointer-events-none"
+          >
+            <div
+                className="w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.8)]"
+            />
+            {node.stereoMode && node.stereoMode !== 'Stereo' && (
+                <div
+                    className={cn(
+                        "absolute top-1/2 -translate-y-1/2 min-w-[12px] h-[12px] flex items-center justify-center text-[8px] font-bold rounded-[2px] shadow-sm pointer-events-none z-10",
+                        node.stereoMode === 'Side' ? "left-full ml-1 bg-[#3b82f6] text-white" : "right-full mr-1 bg-[#22c55e] text-white"
+                    )}
+                >
+                    {node.stereoMode === 'Side' ? 'S' : 'M'}
+                </div>
+            )}
           </div>
         );
       })}

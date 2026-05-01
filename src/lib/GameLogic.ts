@@ -7,7 +7,7 @@ export function generateTargetForLevel(level: number): EQNodeData[] {
   // Lvl 4-7: 2 bands 
   // Lvl 8-10: 3 bands
   
-  const bandCount = level <= 3 ? 1 : level <= 7 ? 2 : 3;
+  const bandCount = level === 12 ? 5 : level <= 3 ? 1 : level <= 7 ? 2 : 3;
   const nodes: EQNodeData[] = [];
   
   // Define discrete frequency bands to avoid overlap canceling target peaks
@@ -16,8 +16,20 @@ export function generateTargetForLevel(level: number): EQNodeData[] {
       bounds = [[100, 10000]];
   } else if (bandCount === 2) {
       bounds = [[50, 500], [2000, 12000]];
-  } else {
+  } else if (bandCount === 3) {
       bounds = [[50, 250], [600, 2500], [5000, 15000]];
+  } else {
+      // Dynamic split for >= 4 bands
+      const minLog = Math.log10(40);
+      const maxLog = Math.log10(16000);
+      const step = (maxLog - minLog) / bandCount;
+      const padding = step * 0.15; // 15% padding to keep bands separate
+      
+      for (let i = 0; i < bandCount; i++) {
+          const start = minLog + i * step + padding;
+          const end = minLog + (i + 1) * step - padding;
+          bounds.push([Math.pow(10, start), Math.pow(10, end)]);
+      }
   }
   
   for(let i = 0; i < bandCount; i++) {
@@ -63,12 +75,20 @@ export function generateTargetForLevel(level: number): EQNodeData[] {
     // For shelf, fix to 1.0. For peering, use the randomized q.
     const effectiveQ = (type === 'lowshelf' || type === 'highshelf') ? 1.0 : q;
 
+    let stereoMode: 'Stereo' | 'Mid' | 'Side' = 'Stereo';
+    if (level === 12) {
+        const r = Math.random();
+        if (r < 0.3) stereoMode = 'Mid';
+        else if (r < 0.6) stereoMode = 'Side';
+    }
+
     nodes.push({
       id: `target_lvl${level}_b${i}`,
       type,
       freq,
       gain,
-      q: effectiveQ
+      q: effectiveQ,
+      stereoMode: stereoMode
     });
   }
 
