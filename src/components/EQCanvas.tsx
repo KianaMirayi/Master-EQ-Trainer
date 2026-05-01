@@ -9,13 +9,6 @@ const MAX_Q = 40.0;
 const SCROLL_SENSITIVITY_NORMAL = 1.05;
 const SCROLL_SENSITIVITY_FINE = 1.01;
 
-// Meter Ballistics Configuration (Adjustable)
-const METER_RMS_ATTACK_FACTOR = 0.4; // 0.0 to 1.0 (higher = faster attack)
-const METER_RMS_RELEASE_DB_PER_FRAME = 0.6; // dB to drop per frame
-const METER_PEAK_ATTACK_FACTOR = 0.8; // 0.0 to 1.0 (higher = faster attack)
-const METER_PEAK_RELEASE_DB_PER_FRAME = 0.4; // dB to drop per frame
-const METER_PEAK_HOLD_FRAMES = 60; // How many frames to hold the absolute peak
-const METER_PEAK_HOLD_RELEASE_DB_PER_FRAME = 0.2; // How fast the hold value drops
 
 interface EQCanvasProps {
   engine: AudioEngine;
@@ -113,7 +106,6 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   // References for temporal envelope smoothing
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
-  const meterPeakRef = useRef<{ rms: number, peak: number, peakHold: number, peakHoldFrames: number }>({ rms: -100, peak: -100, peakHold: -100, peakHoldFrames: 0 });
 
   const userNodesRef = useRef(userNodes);
   useEffect(() => {
@@ -191,7 +183,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             textX = x + 12; // Push far enough inward from left rounded corner
         } else if (freq === 30000 || (freq === 20000 && x > dimensions.width - 25)) {
             ctx.textAlign = 'right';
-            textX = x - 45; // Push away from right edge to avoid overlapping with -12 dB label
+            textX = x - 38; // Push away from right edge to avoid overlapping with -12 dB label
         } else {
             ctx.textAlign = 'center';
         }
@@ -232,7 +224,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         }
 
         ctx.fillStyle = gain === 0 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(255, 255, 255, 0.4)';
-        ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 22, textY);
+        ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 6, textY);
       });
 
       // Spectrum Amplitude Labels
@@ -579,76 +571,6 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }
       drawCurve(false, '#eab308'); // Main curve yellow
 
-      // --- Draw Master Level Meter ---
-      const levels = engine.getMasterLevel();
-      const meter = meterPeakRef.current;
-      
-      // RMS Ballistics
-      if (levels.rms > meter.rms) {
-          meter.rms += (levels.rms - meter.rms) * METER_RMS_ATTACK_FACTOR;
-      } else {
-          meter.rms = Math.max(levels.rms, meter.rms - METER_RMS_RELEASE_DB_PER_FRAME);
-      }
-      
-      // Peak Ballistics
-      if (levels.peak > meter.peak) {
-          meter.peak += (levels.peak - meter.peak) * METER_PEAK_ATTACK_FACTOR;
-      } else {
-          meter.peak = Math.max(levels.peak, meter.peak - METER_PEAK_RELEASE_DB_PER_FRAME);
-      }
-
-      // Peak Hold
-      if (levels.peak > meter.peakHold) {
-          meter.peakHold = levels.peak;
-          meter.peakHoldFrames = METER_PEAK_HOLD_FRAMES;
-      } else {
-          if (meter.peakHoldFrames > 0) {
-              meter.peakHoldFrames--;
-          } else {
-              meter.peakHold = Math.max(levels.peak, meter.peakHold - METER_PEAK_HOLD_RELEASE_DB_PER_FRAME);
-          }
-      }
-
-      const meterWidth = 6;
-      const meterX = dimensions.width - 12;
-      const meterTop = 15;
-      const meterHeight = dimensions.height - 30;
-      
-      const MIN_DB = -60;
-      const MAX_DB = 0;
-      const dbToMeterY = (db: number) => {
-          const clamped = Math.max(MIN_DB, Math.min(MAX_DB, db));
-          const normalized = (clamped - MIN_DB) / (MAX_DB - MIN_DB);
-          return meterTop + meterHeight * (1 - normalized);
-      };
-
-      // Meter BG
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.fillRect(meterX, meterTop, meterWidth, meterHeight);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      ctx.strokeRect(meterX, meterTop, meterWidth, meterHeight);
-
-      // Meter Fill (RMS)
-      const rmsY = dbToMeterY(meter.rms);
-      const gradient = ctx.createLinearGradient(0, meterTop + meterHeight, 0, meterTop);
-      gradient.addColorStop(0, '#22c55e');
-      gradient.addColorStop(0.75, '#eab308');
-      gradient.addColorStop(1, '#ef4444');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(meterX, rmsY, meterWidth, (meterTop + meterHeight) - rmsY);
-
-      // Peak Hold Line
-      const peakY = dbToMeterY(meter.peakHold);
-      ctx.fillStyle = meter.peakHold >= -0.1 ? '#ef4444' : '#ffffff';
-      ctx.fillRect(meterX, peakY - 1, meterWidth, 2);
-
-      // Peak Value Text
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.font = '9px monospace';
-      ctx.fillStyle = meter.peakHold >= -0.1 ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
-      const textPeak = Math.max(MIN_DB, meter.peakHold).toFixed(1);
-      ctx.fillText(textPeak, dimensions.width - 4, meterTop - 2);
 
       frameId = requestAnimationFrame(draw);
     };

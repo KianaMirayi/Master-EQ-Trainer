@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music } from 'lucide-react';
+import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
 import { generateTargetForLevel, generateUserInitial } from '../lib/GameLogic';
 import { EQCanvas, BAND_COLORS } from './EQCanvas';
+import { LevelMeter } from './LevelMeter';
 import { WaveformPlayer } from './WaveformPlayer';
 import { TrackManager, Track } from '../lib/TrackManager';
 
@@ -54,6 +55,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [trackName, setTrackName] = useState<string>('');
+  const [showMeter, setShowMeter] = useState(true);
 
   // Engine lifecycle
   useEffect(() => {
@@ -291,66 +293,84 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
               <div>Double Click: Reset Gain to 0dB</div>
             </div>
             
-            <div className="flex-1 relative">
-                <EQCanvas 
-                    engine={engine}
-                    userNodes={userNodes}
-                    targetNodes={targetNodes}
-                    onNodesChange={handleUserNodesChange}
-                    showTarget={isSettled}
-                />
+            <div className="flex-1 relative flex">
+                <div className="flex-1 min-w-0">
+                    <EQCanvas 
+                        engine={engine}
+                        userNodes={userNodes}
+                        targetNodes={targetNodes}
+                        onNodesChange={handleUserNodesChange}
+                        showTarget={isSettled}
+                    />
+                </div>
+                <LevelMeter engine={engine} isVisible={showMeter} className="w-12 border-l border-slate-800/60 bg-slate-900/40" />
             </div>
             
             {/* Band Controls */}
-            <div className="h-16 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest shrink-0">Bands:</span>
-              {userNodes.map((node, idx) => {
-                const isBypassed = node.enabled === false;
-                const activeColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`;
-                const bgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.1)`;
-                const borderColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.3)`;
-                const hoverBgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.2)`;
+            <div className="h-16 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto justify-between">
+              <div className="flex items-center gap-4 flex-1">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest shrink-0">Bands:</span>
+                {userNodes.map((node, idx) => {
+                  const isBypassed = node.enabled === false;
+                  const activeColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`;
+                  const bgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.1)`;
+                  const borderColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.3)`;
+                  const hoverBgColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.2)`;
 
-                return (
-                  <button
-                    key={node.id}
-                    onClick={() => {
-                        const newNodes = [...userNodes];
-                        newNodes[idx] = { ...node, enabled: isBypassed };
-                        handleUserNodesChange(newNodes);
-                    }}
-                    className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition shrink-0",
-                        !isBypassed 
-                            ? "" // Colors applied via style
-                            : "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
-                    )}
-                    style={!isBypassed ? {
-                        backgroundColor: bgColor,
-                        borderColor: borderColor,
-                        color: activeColor
-                    } : {}}
-                    onMouseEnter={(e) => {
-                        if (!isBypassed) e.currentTarget.style.backgroundColor = hoverBgColor;
-                    }}
-                    onMouseLeave={(e) => {
-                        if (!isBypassed) e.currentTarget.style.backgroundColor = bgColor;
-                    }}
-                  >
-                    <div 
+                  return (
+                    <button
+                      key={node.id}
+                      onClick={() => {
+                          const newNodes = [...userNodes];
+                          newNodes[idx] = { ...node, enabled: isBypassed };
+                          handleUserNodesChange(newNodes);
+                      }}
                       className={cn(
-                          "w-2 h-2 rounded-full transition-colors",
-                          isBypassed ? "bg-slate-600" : ""
-                      )} 
+                          "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition shrink-0",
+                          !isBypassed 
+                              ? "" // Colors applied via style
+                              : "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
+                      )}
                       style={!isBypassed ? {
-                          backgroundColor: activeColor,
-                          boxShadow: `0 0 8px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
+                          backgroundColor: bgColor,
+                          borderColor: borderColor,
+                          color: activeColor
                       } : {}}
-                    />
-                    Band {idx + 1} {!isBypassed ? 'ON' : 'BYPASS'}
-                  </button>
-                );
-              })}
+                      onMouseEnter={(e) => {
+                          if (!isBypassed) e.currentTarget.style.backgroundColor = hoverBgColor;
+                      }}
+                      onMouseLeave={(e) => {
+                          if (!isBypassed) e.currentTarget.style.backgroundColor = bgColor;
+                      }}
+                    >
+                      <div 
+                        className={cn(
+                            "w-2 h-2 rounded-full transition-colors",
+                            isBypassed ? "bg-slate-600" : ""
+                        )} 
+                        style={!isBypassed ? {
+                            backgroundColor: activeColor,
+                            boxShadow: `0 0 8px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
+                        } : {}}
+                      />
+                      Band {idx + 1} {!isBypassed ? 'ON' : 'BYPASS'}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center shrink-0 border-l border-slate-800/60 pl-4">
+                 <button
+                   onClick={() => setShowMeter(m => !m)}
+                   title="Toggle Level Meter"
+                   className={cn(
+                     "p-2 rounded-md transition-colors",
+                     showMeter ? "bg-slate-800 text-emerald-400" : "bg-slate-900/50 text-slate-500 hover:text-slate-300"
+                   )}
+                 >
+                   <Activity className="w-5 h-5" />
+                 </button>
+              </div>
             </div>
           </div>
       </main>
