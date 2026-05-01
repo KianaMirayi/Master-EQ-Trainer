@@ -144,6 +144,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [activeNodeIdx, setActiveNodeIdx] = useState<number | null>(null);
   const [selectedNodeIdx, setSelectedNodeIdx] = useState<number | null>(null);
   const [hoveredNodeIdx, setHoveredNodeIdx] = useState<number | null>(null);
+  const [fillHoverNodeIdx, setFillHoverNodeIdx] = useState<number | null>(null);
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
@@ -212,6 +213,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fillHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleMouseEnterNode = (idx: number) => {
       if (hoverTimeoutRef.current) {
@@ -219,6 +221,13 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           hoverTimeoutRef.current = null;
       }
       setHoveredNodeIdx(idx);
+
+      if (fillHoverTimeoutRef.current) {
+          clearTimeout(fillHoverTimeoutRef.current);
+      }
+      fillHoverTimeoutRef.current = setTimeout(() => {
+          setFillHoverNodeIdx(idx);
+      }, 1000);
   };
 
   const handleMouseLeaveNode = () => {
@@ -228,6 +237,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       hoverTimeoutRef.current = setTimeout(() => {
           setHoveredNodeIdx(null);
       }, 2000); // 2 second delay
+
+      if (fillHoverTimeoutRef.current) {
+          clearTimeout(fillHoverTimeoutRef.current);
+      }
+      setFillHoverNodeIdx(null);
   };
 
   const closeEdit = useCallback(() => {
@@ -644,19 +658,28 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         
         if (isTarget || isPureStereo) {
             // Fast Path: Pure Stereo
-            ctx.shadowBlur = 8;
-            ctx.shadowColor = color;
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 2.5 * 2.5; 
+            ctx.globalAlpha = 0.25;
             ctx.strokeStyle = color;
             ctx.beginPath();
             for (let x = 0; x < dimensions.width; x++) {
-                const db = midResponse[x]; // target is usually stereo, just use mid
+                const db = midResponse[x]; // Pure stereo, mid == side
                 const y = gainToY(db) * dimensions.height;
                 if (x === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
-            ctx.shadowBlur = 0;
+
+            ctx.globalAlpha = 1.0;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = midResponse[x];
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
         } else {
             // Advanced Path: M/S Delta Fusion
             const MERGE_THRESHOLD = 0.5;
@@ -713,9 +736,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             }
 
             // Draw Side Curve (Bottom-most)
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = `rgba(59, 130, 246, ${sideBaseAlpha})`;
-            ctx.lineWidth = sideLineWidth;
+            // Add a thick glow stroke first
+            ctx.lineWidth = sideLineWidth * 2.5;
+            ctx.globalAlpha = 0.25;
             ctx.strokeStyle = sideGradient;
             ctx.beginPath();
             for (let x = 0; x < dimensions.width; x++) {
@@ -726,10 +749,22 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             }
             ctx.stroke();
 
+            // Then draw the crisp main line
+            ctx.globalAlpha = 1.0;
+            ctx.lineWidth = sideLineWidth;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = sideResponse[x];
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
             // Draw Mid Curve
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = `rgba(34, 197, 94, ${midBaseAlpha})`;
-            ctx.lineWidth = midLineWidth;
+            // Add a thick glow stroke first
+            ctx.lineWidth = midLineWidth * 2.5;
+            ctx.globalAlpha = 0.25;
             ctx.strokeStyle = midGradient;
             ctx.beginPath();
             for (let x = 0; x < dimensions.width; x++) {
@@ -739,23 +774,37 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
-            ctx.shadowBlur = 0;
+
+            // Then draw the crisp main line
+            ctx.globalAlpha = 1.0;
+            ctx.lineWidth = midLineWidth;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = midResponse[x];
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
         }
         ctx.restore();
 
         // --- LAYER 2: Selected Node Active Fill ---
-        if (!isTarget && selectedNodeIdx !== null && latestNodes.length > 0) {
+        if (!isTarget && fillHoverNodeIdx !== null && latestNodes.length > 0) {
             const individualResponses = engine.getIndividualFrequencyResponses(false, dimensions.width);
-            const activeIndResp = individualResponses[selectedNodeIdx];
+            const activeIndResp = individualResponses[fillHoverNodeIdx];
             
             if (activeIndResp) {
+                const node = latestNodes[fillHoverNodeIdx];
+                const mode = node?.stereoMode || 'Stereo';
+                
                 const { midDb, sideDb, outDb } = activeIndResp;
                 let fillCurve = outDb;
                 let fillColor = 'rgba(255, 200, 0, 0.2)'; // Yellow
-                if (selectedMode === 'Mid') {
+                if (mode === 'Mid') {
                     fillCurve = midDb;
                     fillColor = 'rgba(0, 255, 150, 0.2)'; // Green
-                } else if (selectedMode === 'Side') {
+                } else if (mode === 'Side') {
                     fillCurve = sideDb;
                     fillColor = 'rgba(0, 150, 255, 0.2)'; // Blue
                 }
