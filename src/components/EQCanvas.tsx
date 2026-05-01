@@ -117,6 +117,62 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
+  const [panelOffset, setPanelOffset] = useState<number>(0);
+  const isDraggingPanel = useRef(false);
+
+  useEffect(() => {
+    setPanelOffset(0);
+  }, [selectedNodeIdx]);
+
+  const handlePanelPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    setOpenDropdown('none');
+    
+    // Ignore dragging if clicked on an actual interactive UI component
+    if ((e.target as HTMLElement).closest('button, select, input, .knob-container, .interactive')) {
+        return;
+    }
+    
+    if (selectedNodeIdx === null) return;
+    
+    // Compute current bounds
+    const node = userNodes[selectedNodeIdx];
+    if (!node) return;
+    const nodeX = freqToX(node.freq) * dimensions.width;
+    const panelHalfWidth = 240;
+    const minX = panelHalfWidth + 10;
+    const maxX = dimensions.width > 0 ? dimensions.width - panelHalfWidth - 10 : panelHalfWidth + 10;
+    
+    let baseLeft = dimensions.width / 2;
+    if (!isNaN(nodeX) && dimensions.width > 0) {
+        const ratio = Math.max(0, Math.min(1, nodeX / dimensions.width));
+        // Linear interpolation ensures panel offsets appropriately relative to node
+        baseLeft = minX + ratio * (maxX - minX);
+    }
+    
+    e.preventDefault();
+    isDraggingPanel.current = true;
+    const startX = e.clientX;
+    const startOffset = panelOffset;
+    
+    const onMove = (moveEv: PointerEvent) => {
+        if (!isDraggingPanel.current) return;
+        const requestedOffset = startOffset + (moveEv.clientX - startX);
+        const requestedLeft = baseLeft + requestedOffset;
+        const clampedLeft = Math.max(minX, Math.min(requestedLeft, maxX));
+        setPanelOffset(clampedLeft - baseLeft);
+    };
+    
+    const onUp = () => {
+        isDraggingPanel.current = false;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+    };
+    
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  
   const [editingFreqNodeIdx, setEditingFreqNodeIdx] = useState<number | null>(null);
   const [editingFreqValue, setEditingFreqValue] = useState<string>('');
   const [freqErrorMsg, setFreqErrorMsg] = useState<string | null>(null);
@@ -1039,33 +1095,41 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
       {/* Floating Control Panel */}
       <AnimatePresence>
-        {selectedNodeIdx !== null && (
-          <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gradient-to-b from-[#252830] to-[#181a1f] border border-slate-700/40 rounded-[32px] pl-6 pr-4 py-5 flex items-stretch gap-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto"
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                setOpenDropdown('none');
-              }}
-              onWheel={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-          >
-              {(() => {
-                  const node = userNodes[selectedNodeIdx];
-                  if (!node) return null;
-                  
-                  const minF = node.minFreq !== undefined ? node.minFreq : 20;
-                  const maxF = node.maxFreq !== undefined ? node.maxFreq : 20000;
-                  const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
-                  const colorStr = `rgb(${BAND_COLORS[selectedNodeIdx % BAND_COLORS.length]})`;
+        {selectedNodeIdx !== null && (() => {
+            const node = userNodes[selectedNodeIdx];
+            if (!node) return null;
 
-                  return (
+            const nodeX = freqToX(node.freq) * dimensions.width;
+            const panelHalfWidth = 240;
+            const minX = panelHalfWidth + 10;
+            const maxX = dimensions.width > 0 ? dimensions.width - panelHalfWidth - 10 : panelHalfWidth + 10;
+            
+            let baseLeft = dimensions.width / 2;
+            if (!isNaN(nodeX) && dimensions.width > 0) {
+                const ratio = Math.max(0, Math.min(1, nodeX / dimensions.width));
+                baseLeft = minX + ratio * (maxX - minX);
+            }
+
+            const minF = node.minFreq !== undefined ? node.minFreq : 20;
+            const maxF = node.maxFreq !== undefined ? node.maxFreq : 20000;
+            const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
+            const colorStr = `rgb(${BAND_COLORS[selectedNodeIdx % BAND_COLORS.length]})`;
+
+            return (
+              <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute bottom-6 bg-gradient-to-b from-[#252830] to-[#181a1f] border border-slate-700/40 rounded-[32px] pl-6 pr-4 py-5 flex items-stretch gap-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto cursor-grab active:cursor-grabbing"
+                  style={{ left: baseLeft + panelOffset, transform: 'translateX(-50%)' }}
+                  onPointerDown={handlePanelPointerDown}
+                  onWheel={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+              >
                       <>
                           {/* Left Panel UI Mockup */}
-                          <div className="flex flex-col justify-between items-start py-2">
+                          <div className="flex flex-col justify-between items-start py-2 relative z-10">
                               {/* Power Button */}
                               <button 
                                   className={cn(
@@ -1284,10 +1348,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                               </div>
                           </div>
                       </>
-                  );
-              })()}
-          </motion.div>
-        )}
+                  </motion.div>
+                );
+            })()}
       </AnimatePresence>
     </div>
   );

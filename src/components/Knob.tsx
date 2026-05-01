@@ -166,7 +166,7 @@ export function Knob({
     };
 
     return (
-        <div className="flex flex-col items-center gap-2 touch-none select-none">
+        <div className="knob-container flex flex-col items-center gap-2 touch-none select-none">
             {/* Top value display container - fixed height to prevent jumping */}
             <div className="h-4 flex items-center justify-center">
                 {(isDragging || showValueNode) && (
