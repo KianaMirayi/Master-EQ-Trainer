@@ -311,11 +311,15 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       ctx.lineWidth = 1;
       ctx.font = '10px monospace';
 
-      const FREQ_TICKS = [20, 30, 50, 70, 100, 200, 300, 500, 700, 1000, 2000, 3000, 5000, 7000, 10000, 20000];
+      const FREQ_TICKS = [
+        20, 30, 40, 50, 60, 70, 80, 100, 
+        200, 300, 400, 500, 600, 700, 800, 900, 1000, 
+        2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000
+      ];
       const FREQ_LABELS: Record<number, string> = {
-        20: '20', 30: '30', 50: '50', 70: '70', 100: '100', 200: '200', 300: '300', 
-        500: '500', 700: '700', 1000: '1k', 2000: '2k', 3000: '3k', 5000: '5k', 
-        7000: '7k', 10000: '10k', 20000: '20k'
+        20: '20', 30: '30', 50: '50', 70: '70', 100: '100', 
+        200: '200', 300: '300', 500: '500', 700: '700', 1000: '1k', 
+        2000: '2k', 3000: '3k', 5000: '5k', 7000: '7k', 10000: '10k', 20000: '20k'
       };
 
       // Vertical lines (Frequencies)
@@ -357,7 +361,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         }
 
         ctx.textBaseline = 'bottom';
-        ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8); // Push up from bottom edge
+        if (FREQ_LABELS[freq]) {
+            ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8); // Push up from bottom edge
+        }
       });
 
       ctx.font = '10px monospace'; // Reset font for horizontal lines
