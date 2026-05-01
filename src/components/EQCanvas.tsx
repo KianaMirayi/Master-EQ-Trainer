@@ -14,10 +14,10 @@ const SCROLL_SENSITIVITY_FINE = 1.01;
 // DEFAULT PANEL POSITION SETTINGS
 // - DEFAULT_PANEL_FREQ: The initial center position (in Hz) on the visualizer.
 //   Change this value (e.g. 100, 600, 1000) to move the initial default position left or right.
-// - You can also change the `bottom-6` class in the JSX (search for `w-[480px]`) 
+// - You can also change the `bottom-6` class in the JSX (search for `w-[540px]`) 
 //   to `bottom-12`, `bottom-[100px]`, etc. to adjust vertical padding.
 // ==========================================
-export const DEFAULT_PANEL_FREQ = 280;
+export const DEFAULT_PANEL_FREQ = 240;
 
 
 interface EQCanvasProps {
@@ -1155,7 +1155,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 20, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute bottom-6 w-[480px] bg-gradient-to-b from-[#252830]/70 to-[#181a1f]/70 backdrop-blur-md border border-slate-700/40 rounded-[32px] px-6 pb-5 pt-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto cursor-default"
+                  className="absolute bottom-6 w-[540px] bg-gradient-to-b from-[#252830]/70 to-[#181a1f]/70 backdrop-blur-md border border-slate-700/40 rounded-[32px] px-6 pb-5 pt-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto cursor-default"
                   style={{ left: baseLeft + currentPanelOffset, transform: 'translateX(-50%)' }}
                   onPointerDown={handlePanelPointerDown}
                   onWheel={(e) => e.stopPropagation()}
@@ -1169,7 +1169,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                           />
                           <div className="flex items-stretch justify-between w-full relative">
                               {/* Left Panel UI Mockup */}
-                              <div className="flex flex-col justify-between items-start py-2 relative z-10 w-[80px]">
+                              <div className="flex flex-col justify-between items-start py-2 relative z-10 w-[120px]">
                               {/* Power Button */}
                               <button 
                                   className={cn(
@@ -1303,19 +1303,23 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                           </div>
 
                           {/* Right Panel UI Mockup */}
-                          <div className="flex flex-col justify-between items-end py-2 w-[80px]">
+                          <div className="flex flex-col justify-between items-end py-2 w-[120px] relative z-10">
                               <div className="flex items-center gap-3">
-                                  <div className="flex items-center gap-1.5 text-slate-400 bg-[#1e2027] px-2 py-1 rounded-full border border-[#2a2d36] text-[10px] font-mono">
+                                  <div className="flex items-center gap-2 text-slate-300 bg-[#1e2027] px-2.5 py-1 rounded-full border border-[#2a2d36] text-xs font-mono font-medium">
                                       <ChevronLeft 
-                                          size={10} 
-                                          className="hover:text-white cursor-pointer" 
+                                          size={14}
+                                          strokeWidth={2.5}
+                                          className="shrink-0 hover:text-white cursor-pointer transition-colors" 
                                           onClick={() => setSelectedNodeIdx(prev => prev! > 0 ? prev! - 1 : userNodes.length - 1)}
+                                          onPointerDown={(e) => e.stopPropagation()}
                                       />
-                                      <span>{selectedNodeIdx + 1}</span>
+                                      <span className="min-w-[14px] text-center">{selectedNodeIdx + 1}</span>
                                       <ChevronRight 
-                                          size={10} 
-                                          className="hover:text-white cursor-pointer" 
+                                          size={14}
+                                          strokeWidth={2.5}
+                                          className="shrink-0 hover:text-white cursor-pointer transition-colors" 
                                           onClick={() => setSelectedNodeIdx(prev => prev! < userNodes.length - 1 ? prev! + 1 : 0)}
+                                          onPointerDown={(e) => e.stopPropagation()}
                                       />
                                   </div>
                                   <button 
