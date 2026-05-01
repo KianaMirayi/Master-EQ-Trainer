@@ -212,7 +212,7 @@ export function WaveformPlayer({ engine, isLoadingTrack, trackName }: WaveformPl
         <div className="flex-1 relative h-16 bg-slate-950 rounded overflow-hidden" ref={containerRef}>
             <canvas 
                 ref={canvasRef}
-                className="absolute inset-0 cursor-crosshair touch-none"
+                className="absolute inset-0 cursor-default touch-none"
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}

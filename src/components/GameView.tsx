@@ -98,6 +98,19 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       activeTrackRef.current = tToPlay;
       setTrackName(tToPlay ? tToPlay.name : '');
 
+      // 1. Generate Nodes
+      const tNodes = generateTargetForLevel(level);
+      const uNodes = generateUserInitial(tNodes, level);
+      
+      setTargetNodes(tNodes);
+      setUserNodes(uNodes);
+      engine!.setTargetNodes(tNodes);
+      engine!.setUserNodes(uNodes);
+      engine!.setListenMode('user');
+      setListenMode('user');
+      setIsSettled(false);
+      setScore(null);
+
       if (tToPlay) {
           try {
              setIsLoadingAudio(true);
@@ -115,19 +128,6 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
              setIsLoadingAudio(false);
           }
       }
-      
-      // 2. Generate Nodes
-      const tNodes = generateTargetForLevel(level);
-      const uNodes = generateUserInitial(tNodes, level);
-      
-      setTargetNodes(tNodes);
-      setUserNodes(uNodes);
-      engine!.setTargetNodes(tNodes);
-      engine!.setUserNodes(uNodes);
-      engine!.setListenMode('user');
-      setListenMode('user');
-      setIsSettled(false);
-      setScore(null);
     }
     init();
 
