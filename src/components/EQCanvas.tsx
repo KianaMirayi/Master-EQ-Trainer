@@ -621,30 +621,141 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
       // --- Draw EQ curves ---
       const drawCurve = (isTarget: boolean, color: string, dashes: number[] = []) => {
-        const response = engine.getFrequencyResponse(isTarget, dimensions.width);
+        const { mid: midResponse, side: sideResponse } = engine.getFrequencyResponse(isTarget, dimensions.width);
         const midY = dimensions.height / 2;
 
-        if (!isTarget && userNodes) {
-            const individualResponses = engine.getIndividualFrequencyResponses(false, dimensions.width);
-            const BAND_COLORS = [
-              '239, 68, 68',   // Red
-              '249, 115, 22',  // Orange
-              '234, 179, 8',   // Yellow
-              '34, 197, 94',   // Green
-              '6, 182, 212',   // Cyan
-              '59, 130, 246',  // Blue
-              '168, 85, 247',  // Purple
-              '236, 72, 153'   // Pink
-            ];
+        let selectedMode = 'Stereo';
+        const latestNodes = userNodesRef.current || [];
+        if (!isTarget && selectedNodeIdx !== null) {
+            const node = latestNodes[selectedNodeIdx];
+            if (node) {
+                selectedMode = node.stereoMode || 'Stereo';
+            }
+        }
 
-            // Draw individual band fills
-            ctx.save();
-            ctx.globalCompositeOperation = 'screen';
-            individualResponses.forEach((indResponse, idx) => {
-                const bandColor = BAND_COLORS[idx % BAND_COLORS.length];
+        let isPureStereo = true;
+        if (!isTarget) {
+            isPureStereo = !latestNodes.some(node => node.enabled !== false && (node.stereoMode === 'Mid' || node.stereoMode === 'Side'));
+        }
+
+        // --- LAYER 1: Global Curves ---
+        ctx.save();
+        ctx.setLineDash(dashes);
+        
+        if (isTarget || isPureStereo) {
+            // Fast Path: Pure Stereo
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = midResponse[x]; // target is usually stereo, just use mid
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        } else {
+            // Advanced Path: M/S Delta Fusion
+            const MERGE_THRESHOLD = 0.5;
+
+            // Alpha logic
+            let midBaseAlpha = 0.8, sideBaseAlpha = 0.8;
+            let midLineWidth = 2, sideLineWidth = 2;
+            
+            if (selectedNodeIdx !== null) {
+                if (selectedMode === 'Mid') {
+                    midBaseAlpha = 1.0; midLineWidth = 3;
+                    sideBaseAlpha = 0.2; sideLineWidth = 2;
+                } else if (selectedMode === 'Side') {
+                    sideBaseAlpha = 1.0; sideLineWidth = 3;
+                    midBaseAlpha = 0.2; midLineWidth = 2;
+                }
+            }
+
+            const interpolateColor = (c1: [number,number,number,number], c2: [number,number,number,number], factor: number) => {
+                const r = Math.round(c1[0] + factor * (c2[0] - c1[0]));
+                const g = Math.round(c1[1] + factor * (c2[1] - c1[1]));
+                const b = Math.round(c1[2] + factor * (c2[2] - c1[2]));
+                const a = c1[3] + factor * (c2[3] - c1[3]);
+                return `rgba(${r}, ${g}, ${b}, ${a})`;
+            };
+
+            const midYellow: [number, number, number, number] = [234, 179, 8, midBaseAlpha];
+            const sideYellowMerged: [number, number, number, number] = [234, 179, 8, 0];
+            
+            const GREEN: [number, number, number, number] = [34, 197, 94, midBaseAlpha];
+            const BLUE: [number, number, number, number] = [59, 130, 246, sideBaseAlpha];
+
+            const midGradient = ctx.createLinearGradient(0, 0, dimensions.width, 0);
+            const sideGradient = ctx.createLinearGradient(0, 0, dimensions.width, 0);
+
+            const STEP = 5;
+            if (dimensions.width > 1) {
+                let lastOffset = -1;
+                for (let x = 0; x < dimensions.width; x += STEP) {
+                    const delta = Math.abs(midResponse[x] - sideResponse[x]);
+                    let factor = Math.min(1, delta / MERGE_THRESHOLD);
+                    const offset = x / (dimensions.width - 1);
+                    midGradient.addColorStop(offset, interpolateColor(midYellow, GREEN, factor));
+                    sideGradient.addColorStop(offset, interpolateColor(sideYellowMerged, BLUE, factor));
+                    lastOffset = offset;
+                }
+                if (lastOffset < 1) {
+                    const x = dimensions.width - 1;
+                    const delta = Math.abs(midResponse[x] - sideResponse[x]);
+                    let factor = Math.min(1, delta / MERGE_THRESHOLD);
+                    midGradient.addColorStop(1, interpolateColor(midYellow, GREEN, factor));
+                    sideGradient.addColorStop(1, interpolateColor(sideYellowMerged, BLUE, factor));
+                }
+            }
+
+            // Draw Side Curve (Bottom-most)
+            ctx.lineWidth = sideLineWidth;
+            ctx.strokeStyle = sideGradient;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = sideResponse[x];
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw Mid Curve
+            ctx.lineWidth = midLineWidth;
+            ctx.strokeStyle = midGradient;
+            ctx.beginPath();
+            for (let x = 0; x < dimensions.width; x++) {
+                const db = midResponse[x];
+                const y = gainToY(db) * dimensions.height;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // --- LAYER 2: Selected Node Active Fill ---
+        if (!isTarget && selectedNodeIdx !== null && latestNodes.length > 0) {
+            const individualResponses = engine.getIndividualFrequencyResponses(false, dimensions.width);
+            const activeIndResp = individualResponses[selectedNodeIdx];
+            
+            if (activeIndResp) {
+                const { midDb, sideDb, outDb } = activeIndResp;
+                let fillCurve = outDb;
+                let fillColor = 'rgba(255, 200, 0, 0.2)'; // Yellow
+                if (selectedMode === 'Mid') {
+                    fillCurve = midDb;
+                    fillColor = 'rgba(0, 255, 150, 0.2)'; // Green
+                } else if (selectedMode === 'Side') {
+                    fillCurve = sideDb;
+                    fillColor = 'rgba(0, 150, 255, 0.2)'; // Blue
+                }
+
+                ctx.save();
                 ctx.beginPath();
                 for (let x = 0; x < dimensions.width; x++) {
-                    const db = indResponse[x];
+                    const db = fillCurve[x];
                     const y = gainToY(db) * dimensions.height;
                     if (x === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
@@ -652,68 +763,32 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 ctx.lineTo(dimensions.width, midY);
                 ctx.lineTo(0, midY);
                 ctx.closePath();
-                
-                // Determine if this band is mostly cutting or boosting to set fill color appropriately
-                const latestNodes = userNodesRef.current;
-                let isCut = false;
-                if (latestNodes[idx] && latestNodes[idx].gain < 0) {
-                    isCut = true;
-                }
-                
-                const currentListeningIdx = listeningNodeIdxRef.current;
-                let alpha = isCut ? 0.15 : 0.25;
-                if (currentListeningIdx !== null && currentListeningIdx !== idx) {
-                    // dim other bands heavily
-                    alpha = 0.02;
-                }
-                
-                ctx.fillStyle = `rgba(${bandColor}, ${alpha})`;
+                ctx.fillStyle = fillColor;
                 ctx.fill();
-            });
-            ctx.restore();
-            
-            // Draw global curve fill (subtle background to tie it all together, mostly visible where bands combine)
-            ctx.save();
-            ctx.beginPath();
-            for (let x = 0; x < dimensions.width; x++) {
-                const db = response[x];
-                const y = gainToY(db) * dimensions.height;
-                if (x === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                ctx.restore();
             }
-            ctx.lineTo(dimensions.width, midY);
-            ctx.lineTo(0, midY);
-            ctx.closePath();
-            ctx.clip();
-            const currentListeningIdx = listeningNodeIdxRef.current;
-            ctx.fillStyle = currentListeningIdx !== null ? 'rgba(255, 255, 255, 0.01)' : 'rgba(255, 255, 255, 0.05)';
-            ctx.fillRect(0, 0, dimensions.width, dimensions.height);
-            ctx.restore();
         }
 
         const currentListeningIdx = listeningNodeIdxRef.current;
-        if (!isTarget && currentListeningIdx !== null && userNodesRef.current) {
+        if (!isTarget && currentListeningIdx !== null && latestNodes.length > 0) {
+            const BAND_COLORS = [
+              '239, 68, 68', '249, 115, 22', '234, 179, 8', '34, 197, 94', 
+              '6, 182, 212', '59, 130, 246', '168, 85, 247', '236, 72, 153'
+            ];
             const bandColor = BAND_COLORS[currentListeningIdx % BAND_COLORS.length];
-            ctx.strokeStyle = `rgba(${bandColor}, 1)`;
-            
-            // Draw vertical markers for listening band
-            const node = userNodesRef.current[currentListeningIdx];
+            // stroke the listened band
+            const node = latestNodes[currentListeningIdx];
             if (node) {
-                // We don't dynamically change Q anymore, just draw the markers for bandwidth 
                 const Q = node.q;
-                const f0 = node.freq; // Ensure to use freq property
-                
-                // Calculate bandpass bandwidth roughly
+                const f0 = node.freq; 
                 const term = Math.sqrt(1 + 1 / (4 * Q * Q));
                 const fL = f0 * (term - 1 / (2 * Q));
                 const fH = f0 * (term + 1 / (2 * Q));
-                
                 const xL = freqToX(fL) * dimensions.width;
                 const xH = freqToX(fH) * dimensions.width;
-                
                 ctx.save();
                 ctx.beginPath();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.strokeStyle = `rgba(${bandColor}, 1)`;
                 ctx.lineWidth = 1;
                 ctx.moveTo(xL, 0);
                 ctx.lineTo(xL, dimensions.height);
@@ -722,22 +797,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 ctx.stroke();
                 ctx.restore();
             }
-        } else {
-            ctx.strokeStyle = color;
         }
-        
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash(dashes);
-        ctx.beginPath();
-        
-        for (let x = 0; x < dimensions.width; x++) {
-            const db = response[x];
-            const y = gainToY(db) * dimensions.height;
-            if (x === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
       };
 
       if (showTarget) {
@@ -898,6 +958,16 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const isBypassed = node.enabled === false;
         const isBoost = node.gain >= 0;
         
+        let nodeColor = BAND_COLORS[idx % BAND_COLORS.length];
+        // If node is Mid or Side, optionally adapt its color, but standard behavior usually keeps band color
+        // so we can distinguish bands. We'll use the band color for the knob, but we dim unselected nodes.
+
+        const isAnySelected = selectedNodeIdx !== null;
+        let dotOpacity = isBypassed ? 0.3 : 1;
+        if (isAnySelected && !isSelected && !isActive) {
+            dotOpacity *= 0.4;
+        }
+
         const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
 
         return (
@@ -908,7 +978,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
               top: `${yPos}px`, 
               transform: 'translate(-50%, -50%)',
               touchAction: 'none',
-              opacity: isBypassed && !isActive ? 0.4 : 1
+              opacity: dotOpacity,
+              transition: 'opacity 0.2s',
             }}
             className="absolute z-10 w-8 h-8 flex items-center justify-center select-none pointer-events-auto"
             onPointerEnter={() => handleMouseEnterNode(idx)}
@@ -918,10 +989,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             <div
                 className={cn(
                     "absolute pointer-events-none rounded-full transition-all duration-300",
-                    isActive ? "w-10 h-10 opacity-100 blur-md scale-100" : isSelected ? "w-6 h-6 opacity-60 blur-sm scale-100" : "w-4 h-4 opacity-0 blur-none scale-50"
+                    (isActive || isSelected) ? "w-10 h-10 opacity-100 blur-md scale-100" : "w-4 h-4 opacity-0 blur-none scale-50"
                 )}
                 style={{
-                    backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
+                    backgroundColor: `rgba(${nodeColor}, 0.5)`
                 }}
             />
             
@@ -929,7 +1000,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 <div
                     className={cn(
                         "absolute top-1/2 -translate-y-1/2 min-w-[12px] h-[12px] flex items-center justify-center text-[8px] font-bold rounded-[2px] shadow-sm pointer-events-none z-10",
-                        node.stereoMode === 'Side' ? "left-full ml-1 bg-[#38bdf8] text-slate-900" : "right-full mr-1 bg-[#22c55e] text-slate-900"
+                        node.stereoMode === 'Side' ? "left-full ml-1 bg-[#3b82f6] text-white" : "right-full mr-1 bg-[#22c55e] text-white"
                     )}
                 >
                     {node.stereoMode === 'Side' ? 'S' : 'M'}
@@ -946,12 +1017,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                     listeningNodeIdx !== null && listeningNodeIdx !== idx && "opacity-20 saturate-0 scale-90"
                 )}
                 style={{
-                  backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, ${isBypassed ? 0.2 : 0.8})`,
-                  borderColor: isBypassed ? 'rgba(148, 163, 184, 0.5)' : `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`,
-                  boxShadow: isActive 
-                    ? `0 0 15px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
-                    : isSelected ? `0 0 8px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
-                    : (isBypassed ? 'none' : `0 0 4px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.2)`)
+                  backgroundColor: `rgba(${nodeColor}, ${isBypassed ? 0.2 : 0.8})`,
+                  borderColor: isBypassed ? 'rgba(148, 163, 184, 0.5)' : `rgba(${nodeColor}, 1)`,
+                  boxShadow: (isActive || isSelected)
+                    ? `0 0 15px rgba(${nodeColor}, 0.9)`
+                    : (isBypassed ? 'none' : `0 0 4px rgba(${nodeColor}, 0.3)`)
                 }}
             >
             </div>

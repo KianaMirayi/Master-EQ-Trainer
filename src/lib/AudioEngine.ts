@@ -5,8 +5,8 @@ export class AudioEngine {
   buffer: AudioBuffer | null = null;
   source: AudioBufferSourceNode | null = null;
   
-  targetFilters: BiquadFilterNode[] = [];
-  userFilters: BiquadFilterNode[] = [];
+  targetGraph: { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } | null = null;
+  userGraph: { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } | null = null;
   
   targetGain: GainNode;
   userGain: GainNode;
@@ -127,15 +127,15 @@ export class AudioEngine {
       }
 
       // source -> filters
-      if (this.targetFilters.length > 0) {
-        this.source.connect(this.targetFilters[0]);
+      if (this.targetGraph) {
+        this.source.connect(this.targetGraph.input);
       } else {
         this.source.connect(this.targetMakeupGain);
         this.source.connect(this.targetAnalyser);
       }
 
-      if (this.userFilters.length > 0) {
-        this.source.connect(this.userFilters[0]);
+      if (this.userGraph) {
+        this.source.connect(this.userGraph.input);
       } else {
         this.source.connect(this.userMakeupGain);
         this.source.connect(this.userAnalyser);
@@ -276,61 +276,131 @@ export class AudioEngine {
       }
   }
 
-  private constructFilterChain(nodes: EQNodeData[]): BiquadFilterNode[] {
-    const filters = nodes.map(data => {
-      const f = this.ctx.createBiquadFilter();
-      const isBypassed = data.enabled === false;
-      const type = isBypassed ? 'peaking' : data.type;
-      f.type = type;
-      f.frequency.value = data.freq;
-      
-      if (type === 'lowshelf' || type === 'highshelf') {
-        f.gain.value = isBypassed ? 0 : data.gain;
-        f.Q.value = 1.0; 
-      } else {
-        f.gain.value = isBypassed ? 0 : data.gain;
-        f.Q.value = data.q;
-      }
-      // Optimize out zipper noise on drag
-      return f;
-    });
+  private constructFilterGraph(nodes: EQNodeData[]): { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } {
+    const input = this.ctx.createGain();
 
-    for (let i = 0; i < filters.length - 1; i++) {
-        filters[i].connect(filters[i+1]);
+    // Splitter
+    const splitter = this.ctx.createChannelSplitter(2);
+    input.connect(splitter);
+
+    // M/S Encoding Matrix
+    // Mid = 0.5 * L + 0.5 * R
+    const midSum = this.ctx.createGain();
+    const lToMid = this.ctx.createGain(); lToMid.gain.value = 0.5;
+    const rToMid = this.ctx.createGain(); rToMid.gain.value = 0.5;
+    splitter.connect(lToMid, 0); lToMid.connect(midSum);
+    splitter.connect(rToMid, 1); rToMid.connect(midSum);
+
+    // Side = 0.5 * L - 0.5 * R
+    const sideSum = this.ctx.createGain();
+    const lToSide = this.ctx.createGain(); lToSide.gain.value = 0.5;
+    const rToSide = this.ctx.createGain(); rToSide.gain.value = -0.5;
+    splitter.connect(lToSide, 0); lToSide.connect(sideSum);
+    splitter.connect(rToSide, 1); rToSide.connect(sideSum);
+
+    // Processing Chains
+    const midFilters: BiquadFilterNode[] = [];
+    const sideFilters: BiquadFilterNode[] = [];
+
+    let currentMid: AudioNode = midSum;
+    let currentSide: AudioNode = sideSum;
+
+    for (let i = 0; i < nodes.length; i++) {
+        const data = nodes[i];
+        const isBypassed = data.enabled === false;
+        
+        // --- Mid Filter ---
+        const midF = this.ctx.createBiquadFilter();
+        const applyMid = !isBypassed && (data.stereoMode === 'Stereo' || data.stereoMode === 'Mid' || !data.stereoMode);
+        midF.type = applyMid ? data.type : 'peaking';
+        midF.frequency.value = data.freq;
+        if (midF.type === 'lowshelf' || midF.type === 'highshelf') {
+            midF.gain.value = applyMid ? data.gain : 0;
+            midF.Q.value = 1.0;
+        } else {
+            midF.gain.value = applyMid ? data.gain : 0;
+            midF.Q.value = data.q;
+        }
+        currentMid.connect(midF);
+        currentMid = midF;
+        midFilters.push(midF);
+
+        // --- Side Filter ---
+        const sideF = this.ctx.createBiquadFilter();
+        const applySide = !isBypassed && (data.stereoMode === 'Stereo' || data.stereoMode === 'Side' || !data.stereoMode);
+        sideF.type = applySide ? data.type : 'peaking';
+        sideF.frequency.value = data.freq;
+        if (sideF.type === 'lowshelf' || sideF.type === 'highshelf') {
+            sideF.gain.value = applySide ? data.gain : 0;
+            sideF.Q.value = 1.0;
+        } else {
+            sideF.gain.value = applySide ? data.gain : 0;
+            sideF.Q.value = data.q;
+        }
+        currentSide.connect(sideF);
+        currentSide = sideF;
+        sideFilters.push(sideF);
     }
-    return filters;
+
+    // Decoding M/S to L/R Matrix
+    // L' = Mid + Side
+    const lSum = this.ctx.createGain();
+    currentMid.connect(lSum);
+    currentSide.connect(lSum);
+
+    // R' = Mid - Side
+    const rSum = this.ctx.createGain();
+    const sideInv = this.ctx.createGain(); sideInv.gain.value = -1;
+    currentSide.connect(sideInv);
+    currentMid.connect(rSum);
+    sideInv.connect(rSum);
+
+    const merger = this.ctx.createChannelMerger(2);
+    lSum.connect(merger, 0, 0);
+    rSum.connect(merger, 0, 1);
+
+    const output = this.ctx.createGain();
+    merger.connect(output);
+
+    return {
+        input,
+        output,
+        midFilters,
+        sideFilters
+    };
   }
 
   private applyNodes(nodes: EQNodeData[], isTarget: boolean) {
-    const filterArray = isTarget ? this.targetFilters : this.userFilters;
+    let graph = isTarget ? this.targetGraph : this.userGraph;
     
     // Disconnect old
-    if (filterArray.length > 0) {
+    if (graph) {
       if (this.source) {
-        try { this.source.disconnect(filterArray[0]); } catch (e) {}
+        try { this.source.disconnect(graph.input); } catch (e) {}
       }
-      filterArray[filterArray.length - 1].disconnect();
+      graph.output.disconnect();
     }
 
-    const newFilters = this.constructFilterChain(nodes);
+    const newGraph = this.constructFilterGraph(nodes);
     
     if (isTarget) {
-      this.targetFilters = newFilters;
+      this.targetGraph = newGraph;
     } else {
-      this.userFilters = newFilters;
+      this.userGraph = newGraph;
     }
 
     // Reconnect
-    if (newFilters.length > 0) {
-      if (this.source) this.source.connect(newFilters[0]);
+    if (newGraph) {
+      if (this.source) {
+        this.source.connect(newGraph.input);
+      }
       
-      const lastNode = newFilters[newFilters.length - 1];
       if (isTarget) {
-        lastNode.connect(this.targetMakeupGain);
-        lastNode.connect(this.targetAnalyser);
+        newGraph.output.connect(this.targetMakeupGain);
+        newGraph.output.connect(this.targetAnalyser);
       } else {
-        lastNode.connect(this.userMakeupGain);
-        lastNode.connect(this.userAnalyser);
+        newGraph.output.connect(this.userMakeupGain);
+        newGraph.output.connect(this.userAnalyser);
       }
     }
 
@@ -343,22 +413,38 @@ export class AudioEngine {
 
   setUserNodes(nodes: EQNodeData[]) {
     // Only update values if structure hasn't changed to avoid audio glitches
-    if (this.userFilters.length === nodes.length) {
+    if (this.userGraph && this.userGraph.midFilters.length === nodes.length) {
       nodes.forEach((n, i) => {
-        const filter = this.userFilters[i];
         const isBypassed = n.enabled === false;
-        const type = isBypassed ? 'peaking' : n.type;
-        filter.type = type;
-        // Direct assignment ensures instant getFrequencyResponse math and UI visual sync 
-        // without relying on Web Audio clock progression (which might fail if suspended)
-        filter.frequency.value = n.freq;
         
-        if (type === 'lowshelf' || type === 'highshelf') {
-          filter.gain.value = isBypassed ? 0 : n.gain;
-          filter.Q.value = 1.0; 
+        // Mid Filter Update
+        const midF = this.userGraph!.midFilters[i];
+        const applyMid = !isBypassed && (n.stereoMode === 'Stereo' || n.stereoMode === 'Mid' || !n.stereoMode);
+        const midType = applyMid ? n.type : 'peaking';
+        midF.type = midType;
+        midF.frequency.value = n.freq;
+        
+        if (midType === 'lowshelf' || midType === 'highshelf') {
+          midF.gain.value = applyMid ? n.gain : 0;
+          midF.Q.value = 1.0; 
         } else {
-          filter.gain.value = isBypassed ? 0 : n.gain;
-          filter.Q.value = n.q;
+          midF.gain.value = applyMid ? n.gain : 0;
+          midF.Q.value = n.q;
+        }
+
+        // Side Filter Update
+        const sideF = this.userGraph!.sideFilters[i];
+        const applySide = !isBypassed && (n.stereoMode === 'Stereo' || n.stereoMode === 'Side' || !n.stereoMode);
+        const sideType = applySide ? n.type : 'peaking';
+        sideF.type = sideType;
+        sideF.frequency.value = n.freq;
+        
+        if (sideType === 'lowshelf' || sideType === 'highshelf') {
+          sideF.gain.value = applySide ? n.gain : 0;
+          sideF.Q.value = 1.0; 
+        } else {
+          sideF.gain.value = applySide ? n.gain : 0;
+          sideF.Q.value = n.q;
         }
       });
       this.calculateAutoMakeupGain(false);
@@ -369,8 +455,8 @@ export class AudioEngine {
 
   // Calculate generic response across spectrum
   private calculateAutoMakeupGain(isTarget: boolean) {
-    const filters = isTarget ? this.targetFilters : this.userFilters;
-    if (filters.length === 0) {
+    const graph = isTarget ? this.targetGraph : this.userGraph;
+    if (!graph || graph.midFilters.length === 0) {
       const makeUpNode = isTarget ? this.targetMakeupGain : this.userMakeupGain;
       makeUpNode.gain.cancelScheduledValues(this.ctx.currentTime);
       makeUpNode.gain.setValueAtTime(1, this.ctx.currentTime);
@@ -385,20 +471,29 @@ export class AudioEngine {
         freqs[i] = Math.pow(10, minLog + (i / (steps-1)) * (maxLog - minLog));
     }
 
-    const totalMag = new Float32Array(steps).fill(1);
+    const midTotalMag = new Float32Array(steps).fill(1);
+    const sideTotalMag = new Float32Array(steps).fill(1);
     const mag = new Float32Array(steps);
     const phase = new Float32Array(steps);
 
-    filters.forEach(f => {
+    graph.midFilters.forEach(f => {
         f.getFrequencyResponse(freqs, mag, phase);
         for(let i = 0; i < steps; i++) {
-            totalMag[i] *= (mag[i] || 1);
+            midTotalMag[i] *= (mag[i] || 1);
+        }
+    });
+
+    graph.sideFilters.forEach(f => {
+        f.getFrequencyResponse(freqs, mag, phase);
+        for(let i = 0; i < steps; i++) {
+            sideTotalMag[i] *= (mag[i] || 1);
         }
     });
 
     let sum = 0;
     for(let i = 0; i < steps; i++) {
-        const db = 20 * Math.log10(totalMag[i] || 1);
+        const avgMag = (midTotalMag[i] + sideTotalMag[i]) / 2;
+        const db = 20 * Math.log10(avgMag || 1);
         sum += db;
     }
     const avgDb = sum / steps;
@@ -412,8 +507,8 @@ export class AudioEngine {
     makeUpNode.gain.value = makeupGainLinear;
   }
 
-  getIndividualFrequencyResponses(isTarget: boolean, width: number): Float32Array[] {
-    const filters = isTarget ? this.targetFilters : this.userFilters;
+  getIndividualFrequencyResponses(isTarget: boolean, width: number): { outDb: Float32Array, midDb: Float32Array, sideDb: Float32Array }[] {
+    const graph = isTarget ? this.targetGraph : this.userGraph;
     const freqs = new Float32Array(width);
     const minLog = Math.log10(MIN_FREQ);
     const maxLog = Math.log10(MAX_FREQ);
@@ -421,26 +516,43 @@ export class AudioEngine {
         freqs[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
     }
 
-    const responses: Float32Array[] = [];
+    const responses: { outDb: Float32Array, midDb: Float32Array, sideDb: Float32Array }[] = [];
     
-    if (filters.length > 0) {
-      filters.forEach(f => {
-          const mag = new Float32Array(width);
-          const phase = new Float32Array(width);
-          f.getFrequencyResponse(freqs, mag, phase);
+    if (graph && graph.midFilters.length > 0) {
+      for (let i = 0; i < graph.midFilters.length; i++) {
+          const midF = graph.midFilters[i];
+          const sideF = graph.sideFilters[i];
+
+          const midMag = new Float32Array(width);
+          const midPhase = new Float32Array(width);
+          midF.getFrequencyResponse(freqs, midMag, midPhase);
+
+          const sideMag = new Float32Array(width);
+          const sidePhase = new Float32Array(width);
+          sideF.getFrequencyResponse(freqs, sideMag, sidePhase);
+
           const outDb = new Float32Array(width);
-          for(let i = 0; i < width; i++) {
-              outDb[i] = 20 * Math.log10(mag[i] || 1);
+          const midDb = new Float32Array(width);
+          const sideDb = new Float32Array(width);
+          
+          for(let j = 0; j < width; j++) {
+              let m = midMag[j];
+              let s = sideMag[j];
+              // Use the magnitude that deviates most from 0dB (1 linear)
+              let mag = Math.abs(1 - m) > Math.abs(1 - s) ? m : s;
+              outDb[j] = 20 * Math.log10(mag || 1);
+              midDb[j] = 20 * Math.log10(m || 1);
+              sideDb[j] = 20 * Math.log10(s || 1);
           }
-          responses.push(outDb);
-      });
+          responses.push({ outDb, midDb, sideDb });
+      }
     }
 
     return responses;
   }
 
-  getFrequencyResponse(isTarget: boolean, width: number): Float32Array {
-    const filters = isTarget ? this.targetFilters : this.userFilters;
+  getFrequencyResponse(isTarget: boolean, width: number): { mid: Float32Array, side: Float32Array } {
+    const graph = isTarget ? this.targetGraph : this.userGraph;
     const freqs = new Float32Array(width);
     const minLog = Math.log10(MIN_FREQ);
     const maxLog = Math.log10(MAX_FREQ);
@@ -448,23 +560,35 @@ export class AudioEngine {
         freqs[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
     }
 
-    const totalMag = new Float32Array(width).fill(1);
-    if (filters.length > 0) {
+    const midTotalMag = new Float32Array(width).fill(1);
+    const sideTotalMag = new Float32Array(width).fill(1);
+    
+    if (graph) {
       const mag = new Float32Array(width);
       const phase = new Float32Array(width);
-      filters.forEach(f => {
+      
+      graph.midFilters.forEach(f => {
           f.getFrequencyResponse(freqs, mag, phase);
           for(let i = 0; i < width; i++) {
-              totalMag[i] *= mag[i];
+              midTotalMag[i] *= mag[i];
+          }
+      });
+
+      graph.sideFilters.forEach(f => {
+          f.getFrequencyResponse(freqs, mag, phase);
+          for(let i = 0; i < width; i++) {
+              sideTotalMag[i] *= mag[i];
           }
       });
     }
 
-    const outDb = new Float32Array(width);
+    const midOutDb = new Float32Array(width);
+    const sideOutDb = new Float32Array(width);
     for(let i = 0; i < width; i++) {
-        outDb[i] = 20 * Math.log10(totalMag[i] || 1);
+        midOutDb[i] = 20 * Math.log10(midTotalMag[i] || 1);
+        sideOutDb[i] = 20 * Math.log10(sideTotalMag[i] || 1);
     }
-    return outDb;
+    return { mid: midOutDb, side: sideOutDb };
   }
 
   getMasterLevel(): { rms: number, peak: number } {
