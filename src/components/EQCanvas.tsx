@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Power, Headphones, X } from 'lucide-react';
+import { Power, Headphones, X, Activity, Settings, ChevronLeft, ChevronRight, Scissors, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { EQNodeData, freqToX, xToFreq, gainToY, yToGain, cn } from '../lib/utils';
 import { AudioEngine } from '../lib/AudioEngine';
+import { Knob } from './Knob';
 
 const MIN_Q = 0.1;
 const MAX_Q = 40.0;
@@ -29,14 +30,92 @@ export const BAND_COLORS = [
   '236, 72, 153'   // Pink
 ];
 
+// SVG-based Icons for different Stereo modes
+const StereoModeIcon = ({ mode, className }: { mode: 'Stereo' | 'Mid' | 'Side', className?: string }) => {
+    // Exact paths for the arcs of two intersecting circles at cx=7 and cx=13 with r=4.5
+    const paths = {
+        lOuter: "M 10 2.646 A 4.5 4.5 0 1 0 10 9.354",
+        lInner: "M 10 2.646 A 4.5 4.5 0 0 1 10 9.354",
+        rOuter: "M 10 2.646 A 4.5 4.5 0 1 1 10 9.354",
+        rInner: "M 10 2.646 A 4.5 4.5 0 0 0 10 9.354"
+    };
+
+    if (mode === 'Stereo') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <circle cx="7" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="13" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+        );
+    }
+    if (mode === 'Mid') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <g strokeOpacity="0.3">
+                    <path d={paths.lOuter} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d={paths.rOuter} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </g>
+                <g strokeOpacity="1">
+                    <path d={paths.lInner} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d={paths.rInner} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </g>
+            </svg>
+        );
+    }
+    if (mode === 'Side') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <g strokeOpacity="1">
+                    <path d={paths.lOuter} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d={paths.rOuter} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </g>
+                <g strokeOpacity="0.3">
+                    <path d={paths.lInner} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d={paths.rInner} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </g>
+            </svg>
+        );
+    }
+    return null;
+}
+
+const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'highshelf', className?: string }) => {
+    if (type === 'peaking') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <path d="M 2 10 Q 6 10, 7 7 T 10 2 T 13 7 T 18 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    if (type === 'lowshelf') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <path d="M 2 3 L 7 3 C 10 3, 11 6.5, 14 6.5 L 18 6.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 2 10 L 7 10 C 10 10, 11 6.5, 14 6.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    if (type === 'highshelf') {
+        return (
+            <svg width="20" height="12" viewBox="0 0 20 12" className={className}>
+                <path d="M 2 6.5 L 6 6.5 C 9 6.5, 10 3, 13 3 L 18 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 6 6.5 C 9 6.5, 10 10, 13 10 L 18 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    return null;
+}
+
 export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [activeNodeIdx, setActiveNodeIdx] = useState<number | null>(null);
+  const [selectedNodeIdx, setSelectedNodeIdx] = useState<number | null>(null);
   const [hoveredNodeIdx, setHoveredNodeIdx] = useState<number | null>(null);
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
   const [editingFreqNodeIdx, setEditingFreqNodeIdx] = useState<number | null>(null);
   const [editingFreqValue, setEditingFreqValue] = useState<string>('');
@@ -581,7 +660,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
   // Handle Dragging
   const handlePointerDown = (e: React.PointerEvent, idx: number) => {
+    e.stopPropagation();
     setActiveNodeIdx(idx);
+    setSelectedNodeIdx(idx);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -649,6 +730,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const handleListenPointerDown = (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
       setActiveNodeIdx(idx);
+      setSelectedNodeIdx(idx);
       setListeningNodeIdx(idx);
       engine.setSoloBand(userNodes[idx]);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -693,6 +775,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     <div 
       ref={containerRef}
       className={cn("relative w-full h-full bg-slate-900 overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      onPointerDown={() => {
+        setSelectedNodeIdx(null);
+        setOpenDropdown('none');
+      }}
       onPointerMove={activeNodeIdx !== null ? handlePointerMove : undefined}
       onPointerUp={activeNodeIdx !== null ? handlePointerUp : undefined}
       onPointerLeave={activeNodeIdx !== null ? handlePointerUp : undefined}
@@ -713,6 +799,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const effectiveQ = node.q || 1;
         const visualWidth = Math.max(20, Math.min(200, 100 / effectiveQ));
         const isActive = activeNodeIdx === idx;
+        const isSelected = selectedNodeIdx === idx;
         const isBypassed = node.enabled === false;
         const isBoost = node.gain >= 0;
         
@@ -734,20 +821,42 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           >
             {/* The interactive node circle */}
             <div
+                className={cn(
+                    "absolute pointer-events-none rounded-full transition-all duration-300",
+                    isActive ? "w-10 h-10 opacity-100 blur-md scale-100" : isSelected ? "w-6 h-6 opacity-60 blur-sm scale-100" : "w-4 h-4 opacity-0 blur-none scale-50"
+                )}
+                style={{
+                    backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
+                }}
+            />
+            
+            {(node.stereoMode === 'Side' || node.stereoMode === 'Mid') && (
+                <div
+                    className={cn(
+                        "absolute top-1/2 -translate-y-1/2 min-w-[12px] h-[12px] flex items-center justify-center text-[8px] font-bold rounded-[2px] shadow-sm pointer-events-none z-10",
+                        node.stereoMode === 'Side' ? "left-full ml-1 bg-[#38bdf8] text-slate-900" : "right-full mr-1 bg-[#22c55e] text-slate-900"
+                    )}
+                >
+                    {node.stereoMode === 'Side' ? 'S' : 'M'}
+                </div>
+            )}
+            
+            <div
                 onPointerDown={(e) => handlePointerDown(e, idx)}
                 onDoubleClick={() => handleDoubleClick(idx)}
                 onWheel={(e: any) => handleWheel(e, idx)}
                 className={cn(
                     "w-4 h-4 rounded-full border-2 cursor-grab transition-all",
-                    isActive || listeningNodeIdx === idx ? "border-white scale-125 z-20" : "border-slate-300",
+                    (isActive || isSelected) || listeningNodeIdx === idx ? "border-white scale-125 z-20" : "border-slate-300",
                     listeningNodeIdx !== null && listeningNodeIdx !== idx && "opacity-20 saturate-0 scale-90"
                 )}
                 style={{
                   backgroundColor: `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, ${isBypassed ? 0.2 : 0.8})`,
                   borderColor: isBypassed ? 'rgba(148, 163, 184, 0.5)' : `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`,
                   boxShadow: isActive 
-                    ? `0 0 20px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
-                    : (isBypassed ? 'none' : `0 0 10px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.3)`)
+                    ? `0 0 15px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.8)`
+                    : isSelected ? `0 0 8px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.5)`
+                    : (isBypassed ? 'none' : `0 0 4px rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 0.2)`)
                 }}
             >
             </div>
@@ -858,27 +967,57 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                             <Headphones size={12} />
                         </button>
                     </div>
-                    <div className="flex w-full px-1">
-                        <select
-                            className="w-full bg-slate-800 text-slate-300 rounded px-1 py-1 text-[10px] font-mono border border-slate-700 outline-none hover:bg-slate-700 cursor-pointer"
-                            value={node.type}
-                            onChange={(e) => {
-                                const newNodes = [...userNodes];
-                                const type = e.target.value as any;
-                                newNodes[idx] = { ...node, type };
-                                
-                                if (type === 'lowshelf' || type === 'highshelf') {
-                                    newNodes[idx].q = 1.0;
-                                } else {
-                                    newNodes[idx].q = Math.max(0.1, Math.min(40, newNodes[idx].q));
-                                }
-                                onNodesChange(newNodes);
+                    <div className="flex w-full px-1 relative">
+                        <button
+                            className="w-full bg-[#1e2027] hover:bg-[#252830] text-slate-300 rounded-full px-3 py-1.5 text-[10px] font-medium border border-[#2a2d36] flex items-center justify-between transition-colors outline-none cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdown(prev => prev === 'tooltipType' ? 'none' : 'tooltipType');
                             }}
                         >
-                            <option value="peaking">Bell (Peaking)</option>
-                            <option value="lowshelf">Low Shelf</option>
-                            <option value="highshelf">High Shelf</option>
-                        </select>
+                            <div className="flex items-center gap-1.5">
+                                <FilterTypeIcon type={node.type as 'peaking'|'lowshelf'|'highshelf'} className="text-slate-400" />
+                                {node.type === 'peaking' ? 'Bell' : node.type === 'lowshelf' ? 'Low Shelf' : 'High Shelf'}
+                            </div>
+                            <ChevronDown size={10} className="opacity-50" />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {openDropdown === 'tooltipType' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 5 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 5 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute top-full left-1 right-1 mt-1 bg-[#1e2027] border border-[#2a2d36] rounded-xl shadow-xl overflow-hidden z-[60] flex flex-col p-1"
+                                >
+                                    {['peaking', 'lowshelf', 'highshelf'].map((t) => (
+                                        <button
+                                            key={t}
+                                            className={cn(
+                                                "w-full text-left px-2 py-1.5 text-[10px] font-medium rounded-lg transition-colors flex items-center gap-2",
+                                                node.type === t ? "bg-[#252830] text-white" : "text-slate-400 hover:bg-[#252830] hover:text-slate-200"
+                                            )}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const newNodes = [...userNodes];
+                                                newNodes[idx] = { ...node, type: t as any };
+                                                if (t === 'lowshelf' || t === 'highshelf') {
+                                                    newNodes[idx].q = 1.0;
+                                                } else {
+                                                    newNodes[idx].q = Math.max(0.1, Math.min(40, newNodes[idx].q));
+                                                }
+                                                onNodesChange(newNodes);
+                                                setOpenDropdown('none');
+                                            }}
+                                        >
+                                            <FilterTypeIcon type={t as 'peaking'|'lowshelf'|'highshelf'} className={node.type === t ? "text-cyan-400" : "opacity-50"} />
+                                            {t === 'peaking' ? 'Bell' : t === 'lowshelf' ? 'Low Shelf' : 'High Shelf'}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                     <div className="flex items-center justify-between px-1 gap-4 text-[10px] tracking-wider text-slate-400">
                         <span className={isBoost ? "text-yellow-400" : "text-sky-400"}>
@@ -897,6 +1036,259 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           </div>
         );
       })}
+
+      {/* Floating Control Panel */}
+      <AnimatePresence>
+        {selectedNodeIdx !== null && (
+          <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gradient-to-b from-[#252830] to-[#181a1f] border border-slate-700/40 rounded-[32px] pl-6 pr-4 py-5 flex items-stretch gap-8 shadow-[0_20px_40px_rgba(0,0,0,0.6)] z-40 pointer-events-auto"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                setOpenDropdown('none');
+              }}
+              onWheel={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+          >
+              {(() => {
+                  const node = userNodes[selectedNodeIdx];
+                  if (!node) return null;
+                  
+                  const minF = node.minFreq !== undefined ? node.minFreq : 20;
+                  const maxF = node.maxFreq !== undefined ? node.maxFreq : 20000;
+                  const isShelf = node.type === 'lowshelf' || node.type === 'highshelf';
+                  const colorStr = `rgb(${BAND_COLORS[selectedNodeIdx % BAND_COLORS.length]})`;
+
+                  return (
+                      <>
+                          {/* Left Panel UI Mockup */}
+                          <div className="flex flex-col justify-between items-start py-2">
+                              {/* Power Button */}
+                              <button 
+                                  className={cn(
+                                      "w-8 h-8 rounded-full border flex items-center justify-center shadow-inner transition-colors",
+                                      node.enabled !== false 
+                                          ? "bg-[#2a4030] hover:bg-[#34503c] border-[#3a6040] text-green-400" 
+                                          : "bg-[#1e2027] hover:bg-[#252830] border-[#2a2d36] text-slate-500 hover:text-slate-400"
+                                  )}
+                                  onClick={() => {
+                                      const newNodes = [...userNodes];
+                                      newNodes[selectedNodeIdx] = { ...node, enabled: node.enabled === false ? true : false };
+                                      onNodesChange(newNodes);
+                                  }}
+                              >
+                                  <Power size={14} />
+                              </button>
+                              
+                              <div className="flex flex-col gap-1.5 mt-auto">
+                                      <div className="relative">
+                                          <button 
+                                              className="px-3 py-1.5 rounded-full bg-[#1e2027] hover:bg-[#252830] border border-[#2a2d36] text-[11px] font-medium text-slate-300 flex items-center gap-1.5 transition-colors"
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setOpenDropdown(prev => prev === 'type' ? 'none' : 'type');
+                                              }}
+                                          >
+                                              <FilterTypeIcon type={node.type as 'peaking'|'lowshelf'|'highshelf'} className="opacity-70" />
+                                              {node.type === 'peaking' ? 'Bell' : 
+                                               node.type === 'lowshelf' ? 'Low Shelf' : 
+                                               node.type === 'highshelf' ? 'High Shelf' : 'Filter'}
+                                          </button>
+                                          
+                                          <AnimatePresence>
+                                              {openDropdown === 'type' && (
+                                                  <motion.div
+                                                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                      exit={{ opacity: 0, scale: 0.95 }}
+                                                      transition={{ duration: 0.15 }}
+                                                      className="absolute bottom-full left-0 mb-2 w-32 bg-[#1e2027] border border-[#2a2d36] rounded-xl shadow-xl overflow-hidden z-50 p-1"
+                                                  >
+                                                      {['peaking', 'lowshelf', 'highshelf'].map((t) => (
+                                                          <button
+                                                              key={t}
+                                                              className={cn(
+                                                                  "w-full text-left px-3 py-1.5 text-[11px] font-medium rounded-lg transition-colors flex items-center gap-2",
+                                                                  node.type === t ? "bg-[#252830] text-white" : "text-slate-400 hover:bg-[#252830] hover:text-slate-200"
+                                                              )}
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  const newNodes = [...userNodes];
+                                                                  newNodes[selectedNodeIdx] = { ...node, type: t as BiquadFilterType };
+                                                                  onNodesChange(newNodes);
+                                                                  setOpenDropdown('none');
+                                                              }}
+                                                          >
+                                                              <FilterTypeIcon type={t as 'peaking'|'lowshelf'|'highshelf'} className={node.type === t ? "text-cyan-400" : "opacity-50"} />
+                                                              {t === 'peaking' ? 'Bell' : 
+                                                               t === 'lowshelf' ? 'Low Shelf' : 
+                                                               t === 'highshelf' ? 'High Shelf' : 'Filter'}
+                                                          </button>
+                                                      ))}
+                                                  </motion.div>
+                                              )}
+                                          </AnimatePresence>
+                                      </div>
+                              </div>
+                          </div>
+
+                          {/* Knobs Section */}
+                          <div className="flex items-end gap-6 relative px-2">
+                              {/* Glowing background top indicator behind gain */}
+                              <div 
+                                  className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-6 w-32 h-16 pointer-events-none rounded-[100%] opacity-15 blur-2xl"
+                                  style={{ backgroundColor: colorStr }}
+                              />
+
+                              <Knob
+                                  label="FREQ"
+                                  unit="Hz"
+                                  value={node.freq}
+                                  min={minF}
+                                  max={maxF}
+                                  size="md"
+                                  type="freq"
+                                  showValueNode={false}
+                                  color={colorStr}
+                                  onChange={(v) => {
+                                      const newNodes = [...userNodes];
+                                      newNodes[selectedNodeIdx] = { ...node, freq: v };
+                                      onNodesChange(newNodes);
+                                  }}
+                              />
+                              
+                              <div className="relative z-10 scale-110 pb-2">
+                                  <Knob
+                                      label="GAIN"
+                                      unit="dB"
+                                      value={node.gain}
+                                      min={node.minGain !== undefined ? node.minGain : -24}
+                                      max={node.maxGain !== undefined ? node.maxGain : 24}
+                                      size="lg"
+                                      defaultValue={0}
+                                      type="gain"
+                                      color={colorStr}
+                                      onChange={(v) => {
+                                          const newNodes = [...userNodes];
+                                          newNodes[selectedNodeIdx] = { ...node, gain: v };
+                                          onNodesChange(newNodes);
+                                      }}
+                                  />
+                              </div>
+
+                              <div className={cn("transition-opacity duration-300 flex items-end gap-2", isShelf ? "opacity-30 pointer-events-none" : "opacity-100")}>
+                                  <Knob
+                                      label="Q"
+                                      value={node.q || 1.0}
+                                      min={MIN_Q}
+                                      max={MAX_Q}
+                                      size="md"
+                                      type="q"
+                                      defaultValue={1.0}
+                                      color={colorStr}
+                                      onChange={(v) => {
+                                          const newNodes = [...userNodes];
+                                          newNodes[selectedNodeIdx] = { ...node, q: v };
+                                          onNodesChange(newNodes);
+                                      }}
+                                  />
+                              </div>
+                          </div>
+
+                          {/* Right Panel UI Mockup */}
+                          <div className="flex flex-col justify-between items-end pl-2 py-2">
+                              <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-1.5 text-slate-400 bg-[#1e2027] px-2 py-1 rounded-full border border-[#2a2d36] text-[10px] font-mono">
+                                      <ChevronLeft 
+                                          size={10} 
+                                          className="hover:text-white cursor-pointer" 
+                                          onClick={() => setSelectedNodeIdx(prev => prev! > 0 ? prev! - 1 : userNodes.length - 1)}
+                                      />
+                                      <span>{selectedNodeIdx + 1}</span>
+                                      <ChevronRight 
+                                          size={10} 
+                                          className="hover:text-white cursor-pointer" 
+                                          onClick={() => setSelectedNodeIdx(prev => prev! < userNodes.length - 1 ? prev! + 1 : 0)}
+                                      />
+                                  </div>
+                                  <button 
+                                    className="w-7 h-7 rounded bg-[#1e2027] hover:bg-slate-700 transition-colors flex items-center justify-center text-slate-400 hover:text-white"
+                                    onClick={() => setSelectedNodeIdx(null)}
+                                  >
+                                      <X size={14} />
+                                  </button>
+                              </div>
+                              
+                              <div className="flex flex-col items-end gap-3 mt-auto">
+                                      <div className="relative">
+                                          <button 
+                                              className="h-7 px-3 rounded-full bg-[#1e2027] hover:bg-[#252830] border border-[#2a2d36] text-[10px] text-slate-300 flex items-center gap-2 transition-colors"
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setOpenDropdown(prev => prev === 'stereo' ? 'none' : 'stereo');
+                                              }}
+                                          >
+                                              <div className="flex items-center justify-center opacity-70 mr-1">
+                                                  <StereoModeIcon mode={node.stereoMode || 'Stereo'} className="w-5 h-3 text-current" />
+                                              </div>
+                                              <div className={cn(
+                                                  "w-1.5 h-1.5 rounded-full",
+                                                  (!node.stereoMode || node.stereoMode === 'Stereo') ? "bg-[#eab308]" :
+                                                  node.stereoMode === 'Mid' ? "bg-[#22c55e]" : "bg-[#38bdf8]"
+                                              )}></div>
+                                              {node.stereoMode || 'Stereo'}
+                                          </button>
+                                          
+                                          <AnimatePresence>
+                                              {openDropdown === 'stereo' && (
+                                                  <motion.div
+                                                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                      exit={{ opacity: 0, scale: 0.95 }}
+                                                      transition={{ duration: 0.15 }}
+                                                      className="absolute bottom-full right-0 mb-2 w-32 bg-[#1e2027] border border-[#2a2d36] rounded-xl shadow-xl overflow-hidden z-50 p-1"
+                                                  >
+                                                      {(['Stereo', 'Mid', 'Side'] as const).map((mode) => (
+                                                          <button
+                                                              key={mode}
+                                                              className={cn(
+                                                                  "w-full text-left px-3 py-1.5 text-[11px] font-medium rounded-lg transition-colors flex items-center gap-2",
+                                                                  (node.stereoMode || 'Stereo') === mode ? "bg-[#252830] text-white" : "text-slate-400 hover:bg-[#252830] hover:text-slate-200"
+                                                              )}
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  const newNodes = [...userNodes];
+                                                                  newNodes[selectedNodeIdx] = { ...node, stereoMode: mode };
+                                                                  onNodesChange(newNodes);
+                                                                  setOpenDropdown('none');
+                                                              }}
+                                                          >
+                                                              <div className="flex items-center justify-center opacity-70 mr-1">
+                                                                  <StereoModeIcon mode={mode} className="w-5 h-3 text-current" />
+                                                              </div>
+                                                              <div className={cn(
+                                                                  "w-1.5 h-1.5 rounded-full",
+                                                                  mode === 'Stereo' ? "bg-[#eab308]" :
+                                                                  mode === 'Mid' ? "bg-[#22c55e]" : "bg-[#38bdf8]"
+                                                              )}></div>
+                                                              {mode}
+                                                          </button>
+                                                      ))}
+                                                  </motion.div>
+                                              )}
+                                          </AnimatePresence>
+                                      </div>
+                              </div>
+                          </div>
+                      </>
+                  );
+              })()}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

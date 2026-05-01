@@ -111,6 +111,7 @@ export interface EQNodeData {
   gain: number;
   q: number;
   enabled?: boolean;
+  stereoMode?: 'Stereo' | 'Mid' | 'Side';
   minFreq?: number;
   maxFreq?: number;
   minGain?: number;
