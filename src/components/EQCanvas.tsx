@@ -152,6 +152,110 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [panelOffsets, setPanelOffsets] = useState<Record<number, number>>({});
   const isDraggingPanel = useRef(false);
 
+  const isHoldingListenKey = useRef(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore key repeats for the listen key
+      if (e.repeat && (e.key === 's' || e.key === 'S' || e.key === 'l' || e.key === 'L')) return;
+
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (isInputFocused) return;
+      
+      const isListenKey = e.key === 's' || e.key === 'S' || e.key === 'l' || e.key === 'L';
+      if (isListenKey) {
+        if (selectedNodeIdx !== null && userNodes[selectedNodeIdx]) {
+           isHoldingListenKey.current = true;
+           setListeningNodeIdx(selectedNodeIdx);
+           engine.setSoloBand(userNodes[selectedNodeIdx]);
+        }
+        return;
+      }
+
+      const nNodes = userNodes.length;
+      if (nNodes === 0) return;
+
+      const sortedIndices = userNodes
+        .map((node, i) => ({ index: i, freq: node.freq }))
+        .sort((a, b) => a.freq - b.freq)
+        .map(item => item.index);
+
+      if (/^[1-9]$/.test(e.key)) {
+        const num = parseInt(e.key, 10);
+        if (num > 0 && num <= nNodes) {
+          e.preventDefault();
+          const targetIdx = num - 1;
+          setSelectedNodeIdx(targetIdx);
+          if (isHoldingListenKey.current && userNodes[targetIdx]) {
+             setListeningNodeIdx(targetIdx);
+             engine.setSoloBand(userNodes[targetIdx]);
+          }
+          return;
+        }
+      }
+
+      const isPrev = e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
+      const isNext = e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey);
+
+      if (isPrev || isNext) {
+         e.preventDefault();
+
+         let nextSelection = sortedIndices[0];
+
+         if (selectedNodeIdx === null) {
+            nextSelection = isPrev ? sortedIndices[sortedIndices.length - 1] : sortedIndices[0];
+         } else {
+            const currentSortedPosition = sortedIndices.indexOf(selectedNodeIdx);
+            if (currentSortedPosition !== -1) {
+               let nextPosition;
+               if (isPrev) {
+                  nextPosition = currentSortedPosition - 1;
+                  if (nextPosition < 0) nextPosition = sortedIndices.length - 1;
+               } else {
+                  nextPosition = currentSortedPosition + 1;
+                  if (nextPosition >= sortedIndices.length) nextPosition = 0;
+               }
+               nextSelection = sortedIndices[nextPosition];
+            } else {
+               nextSelection = isPrev ? sortedIndices[sortedIndices.length - 1] : sortedIndices[0];
+            }
+         }
+         
+         setSelectedNodeIdx(nextSelection);
+         if (isHoldingListenKey.current && userNodes[nextSelection]) {
+             setListeningNodeIdx(nextSelection);
+             engine.setSoloBand(userNodes[nextSelection]);
+         }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const isListenKey = e.key === 's' || e.key === 'S' || e.key === 'l' || e.key === 'L';
+      if (isListenKey) {
+        isHoldingListenKey.current = false;
+        // Do not affect mouse hold if activeNodeIdx is active, though we handle that primarily below.
+        setListeningNodeIdx(null);
+        engine.setSoloBand(null);
+      }
+    };
+
+    const handleBlur = () => {
+      isHoldingListenKey.current = false;
+      setListeningNodeIdx(null);
+      engine.setSoloBand(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+       window.removeEventListener('keydown', handleKeyDown);
+       window.removeEventListener('keyup', handleKeyUp);
+       window.removeEventListener('blur', handleBlur);
+    };
+  }, [selectedNodeIdx, userNodes, engine]);
+
   const handlePanelPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     setOpenDropdown('none');
