@@ -42,11 +42,11 @@ export class AudioEngine {
     // Setup routing
     this.compressor = this.ctx.createDynamicsCompressor();
     // Limiter settings
-    this.compressor.threshold.value = -1.0;
-    this.compressor.knee.value = 2.0;
+    this.compressor.threshold.value = -2.0;
+    this.compressor.knee.value = 4.0;
     this.compressor.ratio.value = 20.0;
     this.compressor.attack.value = 0.002;
-    this.compressor.release.value = 0.100;
+    this.compressor.release.value = 0.150;
 
     this.masterGain = this.ctx.createGain();
     this.masterGain.connect(this.compressor);
