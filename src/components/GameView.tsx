@@ -329,6 +329,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         targetNodes={targetNodes}
                         onNodesChange={handleUserNodesChange}
                         showTarget={isSettled}
+                        listenMode={listenMode}
                     />
                 </div>
                 <LevelMeter engine={engine} isVisible={showMeter} className="w-12 border-l border-slate-800/60 bg-slate-900/40" />

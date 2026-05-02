@@ -27,6 +27,7 @@ interface EQCanvasProps {
   onNodesChange: (nodes: EQNodeData[]) => void;
   showTarget: boolean;
   allowAddRemoveNodes?: boolean;
+  listenMode?: 'user' | 'target';
 }
 
 // ==========================================
@@ -137,7 +138,7 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user' }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -154,6 +155,20 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
   const isHoldingListenKey = useRef(false);
 
+  // Clear listen state when switching to target mode
+  useEffect(() => {
+    if (listenMode === 'target') {
+      if (listeningNodeIdx !== null) {
+        setListeningNodeIdx(null);
+        engine.setSoloBand(null);
+      }
+      if (activeNodeIdx !== null) {
+        setActiveNodeIdx(null);
+      }
+      isHoldingListenKey.current = false;
+    }
+  }, [listenMode, listeningNodeIdx, activeNodeIdx, engine]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore key repeats for the listen key
@@ -165,7 +180,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       
       const isListenKey = e.key === 's' || e.key === 'S' || e.key === 'l' || e.key === 'L';
       if (isListenKey) {
-        if (selectedNodeIdx !== null && userNodes[selectedNodeIdx]) {
+        if (listenMode !== 'target' && selectedNodeIdx !== null && userNodes[selectedNodeIdx]) {
            isHoldingListenKey.current = true;
            setListeningNodeIdx(selectedNodeIdx);
            engine.setSoloBand(userNodes[selectedNodeIdx]);
@@ -254,7 +269,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
        window.removeEventListener('keyup', handleKeyUp);
        window.removeEventListener('blur', handleBlur);
     };
-  }, [selectedNodeIdx, userNodes, engine]);
+  }, [selectedNodeIdx, userNodes, engine, listenMode]);
 
   const handlePanelPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
@@ -1104,6 +1119,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
   const handleListenPointerDown = (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
+      if (listenMode === 'target') return;
       setActiveNodeIdx(idx);
       setSelectedNodeIdx(idx);
       setListeningNodeIdx(idx);
@@ -1173,7 +1189,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   return (
     <div 
       ref={containerRef}
-      className={cn("relative w-full h-full bg-[#040912] overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      className={cn("relative w-full h-full bg-[#050915] overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
         setOpenDropdown('none');
@@ -1198,8 +1214,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         // Approximate width parameter for visual feedback based on Q
         const effectiveQ = node.q || 1;
         const visualWidth = Math.max(20, Math.min(200, 100 / effectiveQ));
-        const isActive = activeNodeIdx === idx;
-        const isSelected = selectedNodeIdx === idx;
+        const isActive = activeNodeIdx === idx && listenMode !== 'target';
+        const isSelected = selectedNodeIdx === idx && listenMode !== 'target';
         const isBypassed = node.enabled === false;
         const isBoost = node.gain >= 0;
         
@@ -1209,7 +1225,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
         const isAnySelected = selectedNodeIdx !== null;
         let dotOpacity = isBypassed ? 0.3 : 1;
-        if (isAnySelected && !isSelected && !isActive) {
+        if (listenMode === 'target') {
+            dotOpacity = 0.15;
+        } else if (isAnySelected && !isSelected && !isActive) {
             dotOpacity *= 0.4;
         }
 
