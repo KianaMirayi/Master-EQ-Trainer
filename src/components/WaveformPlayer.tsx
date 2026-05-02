@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Pause, Repeat } from 'lucide-react';
+import { Play, Pause, Repeat, Music } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
 import { cn } from '../lib/utils';
 
@@ -7,9 +7,11 @@ interface WaveformPlayerProps {
   engine: AudioEngine;
   isLoadingTrack?: boolean;
   trackName?: string;
+  trackArtist?: string;
+  trackCoverArt?: string;
 }
 
-export function WaveformPlayer({ engine, isLoadingTrack, trackName }: WaveformPlayerProps) {
+export function WaveformPlayer({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt }: WaveformPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(engine.isPlaying);
@@ -197,8 +199,24 @@ export function WaveformPlayer({ engine, isLoadingTrack, trackName }: WaveformPl
   return (
     <div className="flex flex-col gap-1 bg-slate-900/50 px-3 pb-3 pt-2 rounded-lg border border-slate-800">
       {trackName && (
-          <div className="text-sm font-sans font-bold italic tracking-wide text-slate-100 px-1 mb-1 truncate">
-              {trackName}
+          <div className="flex items-center gap-3 px-1 mb-1">
+              {trackCoverArt ? (
+                  <img src={trackCoverArt} alt="Cover" className="w-8 h-8 rounded shrink-0 object-cover" />
+              ) : (
+                  <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0 text-slate-500">
+                      <Music className="w-4 h-4" />
+                  </div>
+              )}
+              <div className="flex flex-col min-w-0">
+                  <div className="text-sm font-sans font-bold italic tracking-wide text-slate-100 truncate">
+                      {trackName}
+                  </div>
+                  {trackArtist && (
+                      <div className="text-xs text-slate-400 truncate">
+                          {trackArtist}
+                      </div>
+                  )}
+              </div>
           </div>
       )}
       <div className="flex items-center gap-4">

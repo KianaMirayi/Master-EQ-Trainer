@@ -57,6 +57,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [trackName, setTrackName] = useState<string>('');
+  const [trackArtist, setTrackArtist] = useState<string>('');
+  const [trackCoverArt, setTrackCoverArt] = useState<string>('');
   const [showMeter, setShowMeter] = useState(true);
 
   // Engine lifecycle
@@ -106,6 +108,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       
       activeTrackRef.current = tToPlay;
       setTrackName(tToPlay ? tToPlay.name : '');
+      setTrackArtist(tToPlay ? tToPlay.artist || '' : '');
+      setTrackCoverArt(tToPlay ? tToPlay.coverArt || '' : '');
 
       // 1. Generate Nodes
       const tNodes = generateTargetForLevel(level);
@@ -297,7 +301,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       <main className="flex-1 p-4 md:p-6 relative flex flex-col gap-4">
           <div className="flex flex-col relative w-full items-center">
               <div className="w-full relative">
-                  <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} trackName={trackName} />
+                  <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} trackName={trackName} trackArtist={trackArtist} trackCoverArt={trackCoverArt} />
               </div>
           </div>
           

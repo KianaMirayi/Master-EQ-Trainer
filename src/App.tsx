@@ -17,6 +17,7 @@ export default function App() {
   const [scores, setScores] = useState<LevelScore[]>([]);
   const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
   const [selectedTrackId, setSelectedTrackId] = useState<string>('random-builtin');
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
@@ -32,24 +33,65 @@ export default function App() {
     }
   }, []);
 
-  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>, droppedFiles?: FileList) => {
+    let files = droppedFiles || ('files' in e.target ? (e.target as HTMLInputElement).files : null);
     if (!files || files.length === 0) return;
 
+    setIsUploading(true);
+    let lastTrack = null;
+    let addedCount = 0;
+    
     try {
-      let lastTrack = null;
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit per file
+
       for (let i = 0; i < files.length; i++) {
-        lastTrack = await TrackManager.addCustomTrack(files[i]);
+        const file = files[i];
+        
+        if (!file.type.startsWith('audio/')) {
+          alert(`Skipped "${file.name}": Not a recognized audio file.`);
+          continue;
+        }
+        
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`Skipped "${file.name}": File is too large. Please upload files under 50MB.`);
+          continue;
+        }
+
+        try {
+          lastTrack = await TrackManager.addCustomTrack(file);
+          addedCount++;
+        } catch (err: any) {
+          if (err.name === 'QuotaExceededError') {
+             alert('Browser storage is full! Please delete some custom tracks before uploading more.');
+             break;
+          }
+          throw err;
+        }
       }
-      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-      if (lastTrack) setSelectedTrackId(lastTrack.id);
+      
+      if (addedCount > 0) {
+        setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
+        if (lastTrack) setSelectedTrackId(lastTrack.id);
+      }
     } catch (err) {
       console.error('Failed to load track', err);
       alert('Failed to load audio file.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+      }
     }
-    
-    if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleAudioUpload(e, e.dataTransfer.files);
     }
   };
 
@@ -370,9 +412,15 @@ export default function App() {
                       <button 
                         key={t.id} 
                         onClick={() => setSelectedTrackId(t.id)} 
-                        className={cn("w-full text-left px-3 py-2 rounded-md text-sm transition-colors cursor-pointer break-words", selectedTrackId === t.id ? "bg-cyan-500/20 text-cyan-400 font-medium" : "hover:bg-slate-800 text-slate-300")}
+                        className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer text-left", selectedTrackId === t.id ? "bg-cyan-500/20 font-medium" : "hover:bg-slate-800 text-slate-300")}
                       >
-                        {t.name.replace(/\.[^/.]+$/, "")}
+                        <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
+                           <Music className="w-5 h-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0 pr-2">
+                           <div className={cn("truncate text-sm", selectedTrackId === t.id ? "text-cyan-400" : "")}>{t.name}</div>
+                           {t.artist && <div className={cn("text-xs truncate", selectedTrackId === t.id ? "text-cyan-500/80" : "text-slate-500")}>{t.artist}</div>}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -382,16 +430,36 @@ export default function App() {
                   <label className="flex items-center justify-between text-sm text-slate-400 mb-2">
                     <span>Custom Tracks</span>
                   </label>
-                  <div className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3">
+                  <div 
+                    className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3 relative"
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                  >
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-lg">
+                        <Activity className="w-5 h-5 text-cyan-400 animate-spin mb-2" />
+                        <span className="text-xs font-medium text-cyan-400">Loading Tracks...</span>
+                      </div>
+                    )}
                     {tracks.custom.length > 0 ? tracks.custom.map(t => (
                       <div 
                         key={t.id} 
                         onClick={() => setSelectedTrackId(t.id)}
-                        className={cn("group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer", selectedTrackId === t.id ? "bg-cyan-500/20 text-cyan-400 font-medium whitespace-normal" : "hover:bg-slate-800 text-slate-300 whitespace-normal")}
+                        className={cn("group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer", selectedTrackId === t.id ? "bg-cyan-500/20 font-medium whitespace-normal" : "hover:bg-slate-800 text-slate-300 whitespace-normal")}
                       >
-                        <span className="flex-1 text-left break-words pr-2">
-                          {t.name.replace(/\.[^/.]+$/, "")}
-                        </span>
+                        <div className="flex-1 flex items-center gap-3 overflow-hidden">
+                          {t.coverArt ? (
+                            <img src={t.coverArt} alt="Cover" className={cn("w-10 h-10 rounded shrink-0 object-cover", selectedTrackId === t.id ? "ring-2 ring-cyan-500/50" : "")} />
+                          ) : (
+                            <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
+                               <Music className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div className="flex flex-col flex-1 min-w-0 pr-2">
+                             <div className={cn("truncate w-full", selectedTrackId === t.id ? "text-cyan-400" : "")}>{t.name}</div>
+                             {t.artist && <div className={cn("text-xs truncate w-full", selectedTrackId === t.id ? "text-cyan-500/80" : "text-slate-500")}>{t.artist}</div>}
+                          </div>
+                        </div>
                         <button 
                           onClick={(e) => handleDeleteCustomTrack(t.id, e)}
                           className="text-slate-500 hover:text-red-400 p-1.5 -mr-1.5 rounded transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 focus:opacity-100"
@@ -400,22 +468,23 @@ export default function App() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    )) : (
+                    )) : (!isUploading && (
                       <button 
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full px-3 py-8 text-center text-sm text-slate-500 hover:text-slate-400 bg-slate-900/30 hover:bg-slate-900/50 rounded-lg border border-dashed border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
                       >
-                        No custom tracks uploaded yet. Click to upload.
+                        Drag & Drop or Click to Upload
                       </button>
-                    )}
+                    ))}
                   </div>
                   <button 
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-lg transition shadow-sm"
-                      title="Supported formats: MP3, WAV, AAC, OGG, FLAC"
+                      disabled={isUploading}
+                      className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-lg transition shadow-sm"
+                      title="Supported formats: MP3, WAV, AAC, OGG, FLAC (Max 50MB)"
                   >
-                      <Upload className="w-4 h-4" />
-                      Upload Tracks
+                      {isUploading ? <Activity className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      {isUploading ? 'Uploading...' : 'Upload Tracks'}
                   </button>
                   <p className="text-xs text-center text-slate-500 mt-3">Supported formats: MP3, WAV, AAC, OGG, FLAC</p>
                 </div>
