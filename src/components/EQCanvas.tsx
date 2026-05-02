@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Power, Headphones, X, Activity, Settings, ChevronLeft, ChevronRight, Scissors, ChevronDown } from 'lucide-react';
+import { Power, Headphones, X, Activity, Settings, ChevronLeft, ChevronRight, Scissors, ChevronDown, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { EQNodeData, freqToX, xToFreq, gainToY, yToGain, cn } from '../lib/utils';
 import { AudioEngine } from '../lib/AudioEngine';
@@ -26,6 +26,7 @@ interface EQCanvasProps {
   targetNodes?: EQNodeData[];
   onNodesChange: (nodes: EQNodeData[]) => void;
   showTarget: boolean;
+  allowAddRemoveNodes?: boolean;
 }
 
 // ==========================================
@@ -136,7 +137,7 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -210,6 +211,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [editingFreqNodeIdx, setEditingFreqNodeIdx] = useState<number | null>(null);
   const [editingFreqValue, setEditingFreqValue] = useState<string>('');
   const [freqErrorMsg, setFreqErrorMsg] = useState<string | null>(null);
+  const [editingGainNodeIdx, setEditingGainNodeIdx] = useState<number | null>(null);
+  const [editingGainValue, setEditingGainValue] = useState<string>('');
+  const [editingQNodeIdx, setEditingQNodeIdx] = useState<number | null>(null);
+  const [editingQValue, setEditingQValue] = useState<string>('');
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1019,9 +1024,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           const sensitivity = e.shiftKey ? SCROLL_SENSITIVITY_FINE : SCROLL_SENSITIVITY_NORMAL;
           
           if (Math.sign(e.deltaY) > 0) {
-              newNode.q = newNode.q * sensitivity;
+              newNode.q = (newNode.q || 1) * sensitivity;
           } else if (Math.sign(e.deltaY) < 0) {
-              newNode.q = newNode.q / sensitivity;
+              newNode.q = (newNode.q || 1) / sensitivity;
           }
           
           newNode.q = Math.max(MIN_Q, Math.min(MAX_Q, newNode.q));
@@ -1037,6 +1042,30 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }
   };
 
+  const handleBackgroundDoubleClick = (e: React.MouseEvent) => {
+      if (!allowAddRemoveNodes || !containerRef.current) return;
+      if (userNodes.length >= 10) return; // limit to 10 nodes
+      
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+      
+      const newFreq = xToFreq(x);
+      const newGain = yToGain(y);
+
+      const newNode: EQNodeData = {
+          id: `c_n_${Date.now()}`,
+          freq: newFreq,
+          gain: newGain,
+          q: 1,
+          type: 'peaking',
+          stereoMode: 'Stereo'
+      };
+
+      onNodesChange([...userNodes, newNode]);
+      setSelectedNodeIdx(userNodes.length);
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -1049,6 +1078,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       onPointerUp={activeNodeIdx !== null ? handlePointerUp : undefined}
       onPointerLeave={activeNodeIdx !== null ? handlePointerUp : undefined}
       onWheel={handleGlobalWheel}
+      onDoubleClick={handleBackgroundDoubleClick}
     >
       <canvas
         ref={canvasRef}
@@ -1295,14 +1325,85 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                             )}
                         </AnimatePresence>
                     </div>
-                    <div className="flex items-center justify-between px-1 gap-4 text-[10px] tracking-wider text-slate-400">
-                        <span className={isBoost ? "text-yellow-400" : "text-sky-400"}>
-                            {node.gain > 0 ? '+' : ''}{node.gain.toFixed(2)} dB
-                        </span>
-                        {!isShelf && (
-                            <span>
-                                Q: {effectiveQ.toFixed(2)}
+                    <div className="flex items-center justify-between px-1 gap-4 text-[10px] tracking-wider text-slate-400 min-h-[16px]">
+                        {editingGainNodeIdx === idx ? (
+                            <input
+                                autoFocus
+                                className="w-[46px] bg-slate-900 border border-slate-700 text-slate-200 text-[10px] font-mono rounded px-1 text-center outline-none focus:border-cyan-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none z-[70] py-0.5 -my-0.5"
+                                value={editingGainValue}
+                                onChange={(e) => setEditingGainValue(e.target.value)}
+                                onBlur={() => {
+                                    setEditingGainNodeIdx(null);
+                                    const parsed = parseFloat(editingGainValue);
+                                    if (!isNaN(parsed)) {
+                                        const newNodes = [...userNodes];
+                                        let newVal = parsed;
+                                        const maxG = node.maxGain !== undefined ? node.maxGain : 24;
+                                        const minG = node.minGain !== undefined ? node.minGain : -24;
+                                        if (newVal > maxG) newVal = maxG;
+                                        if (newVal < minG) newVal = minG;
+                                        newNodes[idx] = { ...node, gain: newVal };
+                                        onNodesChange(newNodes);
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') e.currentTarget.blur();
+                                    if (e.key === 'Escape') setEditingGainNodeIdx(null);
+                                }}
+                            />
+                        ) : (
+                            <span 
+                                className={cn(isBoost ? "text-yellow-400" : "text-sky-400", "cursor-text hover:text-white transition-colors")}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingGainNodeIdx(idx);
+                                    setEditingGainValue(node.gain.toFixed(2));
+                                }}
+                            >
+                                {node.gain > 0 ? '+' : ''}{node.gain.toFixed(2)} dB
                             </span>
+                        )}
+                        
+                        {isShelf ? (
+                            <span className="text-slate-500 cursor-not-allowed">
+                                Q: 1.00
+                            </span>
+                        ) : (
+                            editingQNodeIdx === idx ? (
+                                <input
+                                    autoFocus
+                                    className="w-[46px] bg-slate-900 border border-slate-700 text-slate-200 text-[10px] font-mono rounded px-1 text-center outline-none focus:border-cyan-500 [-moz-appearance:_textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none z-[70] py-0.5 -my-0.5"
+                                    value={editingQValue}
+                                    onChange={(e) => setEditingQValue(e.target.value)}
+                                    onBlur={() => {
+                                        setEditingQNodeIdx(null);
+                                        const parsed = parseFloat(editingQValue);
+                                        if (!isNaN(parsed) && parsed > 0) {
+                                            const newNodes = [...userNodes];
+                                            let newVal = parsed;
+                                            if (newVal > MAX_Q) newVal = MAX_Q;
+                                            if (newVal < MIN_Q) newVal = MIN_Q;
+                                            newNodes[idx] = { ...node, q: newVal };
+                                            onNodesChange(newNodes);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') e.currentTarget.blur();
+                                        if (e.key === 'Escape') setEditingQNodeIdx(null);
+                                    }}
+                                />
+                            ) : (
+                                <span 
+                                    className="cursor-text hover:text-white transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingQNodeIdx(idx);
+                                        setEditingQValue(effectiveQ.toFixed(2));
+                                    }}
+                                >
+                                    Q: {effectiveQ.toFixed(2)}
+                                </span>
+                            )
                         )}
                     </div>
                 </div>
@@ -1505,7 +1606,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                               <div className={cn("transition-opacity duration-300 flex items-end gap-2", isShelf ? "opacity-30 pointer-events-none" : "opacity-100")}>
                                   <Knob
                                       label="Q"
-                                      value={node.q || 1.0}
+                                      value={isShelf ? 1.0 : (node.q || 1.0)}
                                       min={MIN_Q}
                                       max={MAX_Q}
                                       size="md"
@@ -1513,6 +1614,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                       defaultValue={1.0}
                                       color={colorStr}
                                       onChange={(v) => {
+                                          if (isShelf) return;
                                           const newNodes = [...userNodes];
                                           newNodes[selectedNodeIdx] = { ...node, q: v };
                                           onNodesChange(newNodes);
@@ -1541,6 +1643,19 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                           onPointerDown={(e) => e.stopPropagation()}
                                       />
                                   </div>
+                                  {allowAddRemoveNodes && (
+                                    <button 
+                                      className="w-7 h-7 rounded border border-red-500/20 bg-[#1e2027] hover:bg-red-500/10 transition-colors flex items-center justify-center text-red-500/70 hover:text-red-400"
+                                      onClick={() => {
+                                          const newNodes = [...userNodes];
+                                          newNodes.splice(selectedNodeIdx, 1);
+                                          setSelectedNodeIdx(null);
+                                          onNodesChange(newNodes);
+                                      }}
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                  )}
                                   <button 
                                     className="w-7 h-7 rounded bg-[#1e2027] hover:bg-slate-700 transition-colors flex items-center justify-center text-slate-400 hover:text-white"
                                     onClick={() => setSelectedNodeIdx(null)}

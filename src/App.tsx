@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
+
+import { CalibrationSettings } from './components/CalibrationEditor';
 
 interface LevelScore {
   level: number;
@@ -10,7 +12,7 @@ interface LevelScore {
 }
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'game'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration'>('dashboard');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [scores, setScores] = useState<LevelScore[]>([]);
   const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
@@ -107,6 +109,10 @@ export default function App() {
         onBack={() => setCurrentView('dashboard')} 
       />
     );
+  }
+
+  if (currentView === 'calibration') {
+    return <CalibrationSettings onBack={() => setCurrentView('dashboard')} />;
   }
 
   // Dashboard View
@@ -303,6 +309,25 @@ export default function App() {
                     <div>
                       <h3 className="font-medium text-slate-200">Audio Source</h3>
                       <p className="text-sm text-slate-400 mt-0.5">Manage tracks and playback mode</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    setCurrentView('calibration');
+                  }}
+                  className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-cyan-500/10 rounded-xl text-cyan-400 group-hover:bg-cyan-500/20 group-hover:text-cyan-300 transition-colors">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-slate-200">Headphone Calibration</h3>
+                      <p className="text-sm text-slate-400 mt-0.5">Counteract headphone coloration with global EQ profiles</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />

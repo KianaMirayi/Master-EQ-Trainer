@@ -7,6 +7,7 @@ export class AudioEngine {
   
   targetGraph: { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } | null = null;
   userGraph: { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } | null = null;
+  calibrationGraph: { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } | null = null;
   
   targetGain: GainNode;
   userGain: GainNode;
@@ -18,6 +19,9 @@ export class AudioEngine {
   
   masterGain: GainNode;
   compressor: DynamicsCompressorNode;
+  
+  calibrationInput: GainNode;
+  calibrationOutput: GainNode;
 
   targetAnalyser: AnalyserNode;
   userAnalyser: AnalyserNode;
@@ -51,7 +55,13 @@ export class AudioEngine {
     this.masterAnalyser.fftSize = 256;
     this.masterAnalyser.smoothingTimeConstant = 0.8;
     this.compressor.connect(this.masterAnalyser);
-    this.masterAnalyser.connect(this.ctx.destination);
+    
+    this.calibrationInput = this.ctx.createGain();
+    this.masterAnalyser.connect(this.calibrationInput);
+    
+    this.calibrationOutput = this.ctx.createGain();
+    this.calibrationInput.connect(this.calibrationOutput);
+    this.calibrationOutput.connect(this.ctx.destination);
     
     // Listen paths
     this.targetGain = this.ctx.createGain();
@@ -450,6 +460,34 @@ export class AudioEngine {
       this.calculateAutoMakeupGain(false);
     } else {
       this.applyNodes(nodes, false);
+    }
+  }
+
+  setCalibrationNodes(nodes: EQNodeData[]) {
+    if (this.calibrationGraph) {
+      this.calibrationInput.disconnect(this.calibrationGraph.input);
+      this.calibrationGraph.output.disconnect();
+    } else {
+      this.calibrationInput.disconnect(this.calibrationOutput);
+    }
+
+    const activeNodes = nodes.filter(n => n.enabled !== false);
+    
+    if (activeNodes.length > 0) {
+      this.calibrationGraph = this.constructFilterGraph(activeNodes);
+      this.calibrationInput.connect(this.calibrationGraph.input);
+      this.calibrationGraph.output.connect(this.calibrationOutput);
+    } else {
+      this.calibrationGraph = null;
+      this.calibrationInput.connect(this.calibrationOutput);
+    }
+  }
+
+  setCalibrationGain(gainDb: number) {
+    if (this.calibrationOutput) {
+      // Map dB to linear multiplier. e.g. 0dB = 1, -6dB ≈ 0.5, 6dB ≈ 2
+      const gainLinear = Math.pow(10, gainDb / 20);
+      this.calibrationOutput.gain.setTargetAtTime(gainLinear, this.ctx.currentTime, 0.05);
     }
   }
 

@@ -152,6 +152,9 @@ export function Knob({
         onChange(defaultVal);
     };
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editStr, setEditStr] = useState("");
+
     const displayValue = () => {
         if (type === 'freq') {
             return value < 1000 ? Math.round(value) : (value / 1000).toFixed(2) + 'k';
@@ -165,19 +168,60 @@ export function Knob({
         return value.toFixed(2);
     };
 
+    const handleValueClick = () => {
+        if (!isEditing) {
+            setIsEditing(true);
+            setEditStr(type === 'freq' ? Math.round(value).toString() : value.toFixed(type === 'gain' ? 1 : 2));
+        }
+    };
+
+    const handleValueBlur = () => {
+        setIsEditing(false);
+        const parsed = parseFloat(editStr.replace('k', '000'));
+        if (!isNaN(parsed)) {
+            let newVal = parsed;
+            if (type === 'freq' && editStr.toLowerCase().endsWith('k')) {
+                newVal *= 1000;
+            }
+            if (newVal < min) newVal = min;
+            if (newVal > max) newVal = max;
+            onChange(newVal);
+        }
+    };
+
+    const handleValueKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleValueBlur();
+        }
+    };
+
     return (
         <div className="knob-container flex flex-col items-center gap-2 touch-none select-none">
             {/* Top value display container - fixed height to prevent jumping */}
             <div className="h-4 flex items-center justify-center">
-                {(isDragging || showValueNode) && (
-                    <div 
-                        className={cn(
-                            "text-[11px] font-medium whitespace-nowrap transition-colors",
-                            isDragging ? "text-white" : "text-slate-400"
-                        )}
-                    >
-                        {displayValue()} {unit}
-                    </div>
+                {(isDragging || showValueNode || isEditing) && (
+                    isEditing ? (
+                        <div className="flex z-50">
+                            <input 
+                                autoFocus
+                                value={editStr}
+                                onChange={(e) => setEditStr(e.target.value)}
+                                onBlur={handleValueBlur}
+                                onKeyDown={handleValueKeyDown}
+                                className="bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono rounded px-1 w-12 text-center outline-none focus:border-cyan-500"
+                            />
+                        </div>
+                    ) : (
+                        <div 
+                            className={cn(
+                                "text-[11px] font-medium whitespace-nowrap transition-colors cursor-text hover:text-white",
+                                isDragging ? "text-white" : "text-slate-400"
+                            )}
+                            onClick={handleValueClick}
+                        >
+                            {displayValue()} {unit}
+                        </div>
+                    )
                 )}
             </div>
             

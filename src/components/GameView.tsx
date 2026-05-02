@@ -44,6 +44,8 @@ interface GameViewProps {
   onBack: () => void;
 }
 
+import { CalibrationManager } from '../lib/CalibrationManager';
+
 export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -60,6 +62,13 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   // Engine lifecycle
   useEffect(() => {
     const newEngine = new AudioEngine();
+    const activePreset = CalibrationManager.getActivePreset();
+    if (activePreset) {
+      newEngine.setCalibrationNodes(activePreset.nodes);
+      if (activePreset.globalGain !== undefined) {
+        newEngine.setCalibrationGain(activePreset.globalGain);
+      }
+    }
     setEngine(newEngine);
     return () => {
       newEngine.dispose();
