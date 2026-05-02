@@ -173,6 +173,25 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     setListenMode(mode);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent rapid toggling if the key is held down
+      if (e.repeat) return;
+      
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (isInputFocused) return;
+
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault(); // Prevent accidental default operations
+        handleModeChange(listenMode === 'target' ? 'user' : 'target');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [listenMode, engine]);
+
   const handleUserNodesChange = (nodes: EQNodeData[]) => {
     if (!engine) return;
     setUserNodes(nodes);
