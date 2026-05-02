@@ -28,6 +28,7 @@ interface EQCanvasProps {
   showTarget: boolean;
   allowAddRemoveNodes?: boolean;
   listenMode?: 'user' | 'target';
+  onListenModeChange?: (mode: 'user' | 'target') => void;
 }
 
 // ==========================================
@@ -138,9 +139,14 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user' }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleNodesChangeWrapper = (nodes: EQNodeData[]) => {
+      if (listenMode === 'target') onListenModeChange?.('user');
+      onNodesChange(nodes);
+  };
   
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [activeNodeIdx, setActiveNodeIdx] = useState<number | null>(null);
@@ -177,6 +183,19 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       const activeEl = document.activeElement;
       const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
       if (isInputFocused) return;
+      
+      if (e.key === 'b' || e.key === 'B') {
+        if (selectedNodeIdx !== null && userNodes[selectedNodeIdx]) {
+           if (listenMode === 'target') onListenModeChange?.('user');
+           const newNodes = [...userNodes];
+           newNodes[selectedNodeIdx] = { 
+               ...newNodes[selectedNodeIdx], 
+               enabled: newNodes[selectedNodeIdx].enabled === false ? true : false 
+           };
+           handleNodesChangeWrapper(newNodes);
+        }
+        return;
+      }
       
       const isListenKey = e.key === 's' || e.key === 'S' || e.key === 'l' || e.key === 'L';
       if (isListenKey) {
@@ -269,7 +288,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
        window.removeEventListener('keyup', handleKeyUp);
        window.removeEventListener('blur', handleBlur);
     };
-  }, [selectedNodeIdx, userNodes, engine, listenMode]);
+  }, [selectedNodeIdx, userNodes, engine, listenMode, onNodesChange]);
 
   const handlePanelPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
@@ -340,6 +359,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const fillHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleMouseEnterNode = (idx: number) => {
+      if (listenMode === 'target') return;
       if (hoverTimeoutRef.current) {
           clearTimeout(hoverTimeoutRef.current);
           hoverTimeoutRef.current = null;
@@ -405,7 +425,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }
       const newNodes = [...userNodes];
       newNodes[idx] = { ...newNodes[idx], freq: val };
-      onNodesChange(newNodes);
+      handleNodesChangeWrapper(newNodes);
       closeEdit();
   };
 
@@ -450,7 +470,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       ctx.font = '10px monospace';
 
       const FREQ_TICKS = [
-        20, 30, 40, 50, 60, 70, 80, 100, 
+        20, 30, 40, 50, 60, 70, 80, 90, 100, 
         200, 300, 400, 500, 600, 700, 800, 900, 1000, 
         2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000
       ];
@@ -1051,6 +1071,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   // Handle Dragging
   const handlePointerDown = (e: React.PointerEvent, idx: number) => {
     e.stopPropagation();
+    if (listenMode === 'target') onListenModeChange?.('user');
     setActiveNodeIdx(idx);
     setSelectedNodeIdx(idx);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -1100,7 +1121,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             engine.setSoloBand(newNodes[activeNodeIdx]);
         }
         
-        onNodesChange(newNodes);
+        handleNodesChangeWrapper(newNodes);
     });
   }, [activeNodeIdx, listeningNodeIdx, userNodes, onNodesChange, engine]);
 
@@ -1119,7 +1140,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
   const handleListenPointerDown = (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
-      if (listenMode === 'target') return;
+      if (listenMode === 'target') onListenModeChange?.('user');
       setActiveNodeIdx(idx);
       setSelectedNodeIdx(idx);
       setListeningNodeIdx(idx);
@@ -1128,16 +1149,18 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   };
 
   const handleDoubleClick = (idx: number) => {
+      if (listenMode === 'target') onListenModeChange?.('user');
       const newNodes = [...userNodes];
       const newNode = { ...newNodes[idx] };
       newNode.gain = 0;
       newNodes[idx] = newNode;
-      onNodesChange(newNodes);
+      handleNodesChangeWrapper(newNodes);
   }
 
   const handleWheel = (e: WheelEvent, idx: number) => {
       e.stopPropagation();
       e.preventDefault();
+      if (listenMode === 'target') onListenModeChange?.('user');
       const newNodes = [...userNodes];
       const newNode = { ...newNodes[idx] };
       if (newNode.type === 'peaking') {
@@ -1152,7 +1175,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           newNode.q = Math.max(MIN_Q, Math.min(MAX_Q, newNode.q));
           
           newNodes[idx] = newNode;
-          onNodesChange(newNodes);
+          handleNodesChangeWrapper(newNodes);
       }
   };
 
@@ -1163,6 +1186,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   };
 
   const handleBackgroundDoubleClick = (e: React.MouseEvent) => {
+      if (listenMode === 'target') onListenModeChange?.('user');
       if (!allowAddRemoveNodes || !containerRef.current) return;
       if (userNodes.length >= 10) return; // limit to 10 nodes
       
@@ -1182,14 +1206,15 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           stereoMode: 'Stereo'
       };
 
-      onNodesChange([...userNodes, newNode]);
+      handleNodesChangeWrapper([...userNodes, newNode]);
       setSelectedNodeIdx(userNodes.length);
   };
 
   return (
     <div 
       ref={containerRef}
-      className={cn("relative w-full h-full bg-[#050915] overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      className={cn("relative w-full h-full overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      style={{ backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)' }}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
         setOpenDropdown('none');
@@ -1320,7 +1345,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                 e.stopPropagation();
                                 const newNodes = [...userNodes];
                                 newNodes[idx] = { ...node, enabled: isBypassed };
-                                onNodesChange(newNodes);
+                                handleNodesChangeWrapper(newNodes);
                             }}
                             className={cn(
                                 "p-1 rounded transition-colors", 
@@ -1435,7 +1460,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                                 } else {
                                                     newNodes[idx].q = Math.max(0.1, Math.min(40, newNodes[idx].q));
                                                 }
-                                                onNodesChange(newNodes);
+                                                handleNodesChangeWrapper(newNodes);
                                                 setOpenDropdown('none');
                                             }}
                                         >
@@ -1465,7 +1490,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                         if (newVal > maxG) newVal = maxG;
                                         if (newVal < minG) newVal = minG;
                                         newNodes[idx] = { ...node, gain: newVal };
-                                        onNodesChange(newNodes);
+                                        handleNodesChangeWrapper(newNodes);
                                     }
                                 }}
                                 onKeyDown={(e) => {
@@ -1506,7 +1531,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                             if (newVal > MAX_Q) newVal = MAX_Q;
                                             if (newVal < MIN_Q) newVal = MIN_Q;
                                             newNodes[idx] = { ...node, q: newVal };
-                                            onNodesChange(newNodes);
+                                            handleNodesChangeWrapper(newNodes);
                                         }
                                     }}
                                     onKeyDown={(e) => {
@@ -1623,7 +1648,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                   onClick={() => {
                                       const newNodes = [...userNodes];
                                       newNodes[selectedNodeIdx] = { ...node, enabled: node.enabled === false ? true : false };
-                                      onNodesChange(newNodes);
+                                      handleNodesChangeWrapper(newNodes);
                                   }}
                               >
                                   <Power size={14} />
@@ -1664,7 +1689,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                                                   e.stopPropagation();
                                                                   const newNodes = [...userNodes];
                                                                   newNodes[selectedNodeIdx] = { ...node, type: t as BiquadFilterType };
-                                                                  onNodesChange(newNodes);
+                                                                  handleNodesChangeWrapper(newNodes);
                                                                   setOpenDropdown('none');
                                                               }}
                                                           >
@@ -1702,7 +1727,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                   onChange={(v) => {
                                       const newNodes = [...userNodes];
                                       newNodes[selectedNodeIdx] = { ...node, freq: v };
-                                      onNodesChange(newNodes);
+                                      handleNodesChangeWrapper(newNodes);
                                   }}
                               />
                               
@@ -1720,7 +1745,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                       onChange={(v) => {
                                           const newNodes = [...userNodes];
                                           newNodes[selectedNodeIdx] = { ...node, gain: v };
-                                          onNodesChange(newNodes);
+                                          handleNodesChangeWrapper(newNodes);
                                       }}
                                   />
                               </div>
@@ -1739,7 +1764,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                           if (isShelf) return;
                                           const newNodes = [...userNodes];
                                           newNodes[selectedNodeIdx] = { ...node, q: v };
-                                          onNodesChange(newNodes);
+                                          handleNodesChangeWrapper(newNodes);
                                       }}
                                   />
                               </div>
@@ -1772,7 +1797,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                           const newNodes = [...userNodes];
                                           newNodes.splice(selectedNodeIdx, 1);
                                           setSelectedNodeIdx(null);
-                                          onNodesChange(newNodes);
+                                          handleNodesChangeWrapper(newNodes);
                                       }}
                                     >
                                         <Trash2 size={12} />
@@ -1826,7 +1851,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                                                                   e.stopPropagation();
                                                                   const newNodes = [...userNodes];
                                                                   newNodes[selectedNodeIdx] = { ...node, stereoMode: mode };
-                                                                  onNodesChange(newNodes);
+                                                                  handleNodesChangeWrapper(newNodes);
                                                                   setOpenDropdown('none');
                                                               }}
                                                           >

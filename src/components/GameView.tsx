@@ -319,6 +319,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
               <div>Drag: Frequency & Gain</div>
               <div>Alt + Drag: Q factor (Width)</div>
               <div>Double Click: Reset Gain to 0dB</div>
+              <div>B: Bypass Selected Node</div>
+              <div>S or L: Listen to Selected Node</div>
             </div>
             
             <div className="flex-1 relative flex">
@@ -330,6 +332,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         onNodesChange={handleUserNodesChange}
                         showTarget={isSettled}
                         listenMode={listenMode}
+                        onListenModeChange={handleModeChange}
                     />
                 </div>
                 <LevelMeter engine={engine} isVisible={showMeter} className="w-12 border-l border-slate-800/60 bg-slate-900/40" />
