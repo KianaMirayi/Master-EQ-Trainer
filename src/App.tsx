@@ -14,6 +14,7 @@ interface LevelScore {
 export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration'>('dashboard');
   const [activeLevel, setActiveLevel] = useState<number>(1);
+  const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const [scores, setScores] = useState<LevelScore[]>([]);
   const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
   const [selectedTrackId, setSelectedTrackId] = useState<string>('random-builtin');
@@ -125,7 +126,8 @@ export default function App() {
   const highestUnlocked = Math.max(1, ...scores.filter(s => s.score >= 72).map(s => s.level + 1));
   const masteryScore = scores.reduce((sum, s) => sum + s.score, 0);
 
-  const handleLevelSelect = (level: number) => {
+  const handleLevelSelect = (level: number, testMode: boolean = false) => {
+    setIsTestMode(testMode);
     setActiveLevel(level);
     setCurrentView('game');
   };
@@ -148,7 +150,11 @@ export default function App() {
         selectedTrackId={selectedTrackId} 
         onLevelComplete={handleLevelComplete} 
         onRetry={(score) => saveScore(activeLevel, score)}
-        onBack={() => setCurrentView('dashboard')} 
+        onBack={() => {
+           setIsTestMode(false);
+           setCurrentView('dashboard');
+        }}
+        onLevelChange={isTestMode ? (lvl) => setActiveLevel(lvl) : undefined}
       />
     );
   }
@@ -208,11 +214,32 @@ export default function App() {
         </header>
 
         <section className="mb-16">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-
-            <Trophy className="w-5 h-5 text-amber-400" />
-            Journey
-          </h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                Journey
+              </h2>
+              
+              <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-1.5 rounded-lg">
+                <span className="text-sm text-slate-400 pl-2">Test Environment:</span>
+                <select 
+                  className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-2 py-1 outline-none focus:border-cyan-500"
+                  onChange={(e) => {
+                     const lvl = parseInt(e.target.value);
+                     if (!isNaN(lvl)) {
+                        handleLevelSelect(lvl, true);
+                     }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Select Core Level (1-100)...</option>
+                  {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
+                     <option key={l} value={l}>Level {l}</option>
+                  ))}
+                </select>
+              </div>
+          </div>
+          
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4">
             {levelsParams.map(level => {
               const isUnlocked = level <= highestUnlocked;

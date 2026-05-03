@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity } from 'lucide-react';
+import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
-import { generateTargetForLevel, generateUserInitial } from '../lib/GameLogic';
+import { LevelManager } from '../lib/LevelManager';
 import { EQCanvas, BAND_COLORS } from './EQCanvas';
 import { LevelMeter } from './LevelMeter';
 import { WaveformPlayer } from './WaveformPlayer';
@@ -42,11 +42,12 @@ interface GameViewProps {
   onLevelComplete: (score: number) => void;
   onRetry: (score: number) => void;
   onBack: () => void;
+  onLevelChange?: (level: number) => void;
 }
 
 import { CalibrationManager } from '../lib/CalibrationManager';
 
-export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack }: GameViewProps) {
+export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack, onLevelChange }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [targetNodes, setTargetNodes] = useState<EQNodeData[]>([]);
@@ -60,7 +61,10 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [trackArtist, setTrackArtist] = useState<string>('');
   const [trackCoverArt, setTrackCoverArt] = useState<string>('');
   const [showMeter, setShowMeter] = useState(true);
+  const [showTestModePanel, setShowTestModePanel] = useState(false);
 
+  const config = LevelManager.getLevelConfig(level);
+  
   // Engine lifecycle
   useEffect(() => {
     const newEngine = new AudioEngine();
@@ -112,8 +116,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       setTrackCoverArt(tToPlay ? tToPlay.coverArt || '' : '');
 
       // 1. Generate Nodes
-      const tNodes = generateTargetForLevel(level);
-      const uNodes = generateUserInitial(tNodes, level);
+      const tNodes = LevelManager.generateLevelTargets(level);
+      const uNodes = LevelManager.generateUserInitial(tNodes, level);
       
       setTargetNodes(tNodes);
       setUserNodes(uNodes);
@@ -238,9 +242,37 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           <h1 className="text-xl font-bold tracking-tight text-white/90">
             Level <span className="text-cyan-400">{level}</span>
           </h1>
-          <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 ml-2 shadow-inner">
-            {targetNodes.length} Band{targetNodes.length > 1 && 's'}
-          </span>
+          {onLevelChange && (
+            <div className="flex items-center gap-2">
+              <select 
+                value={level}
+                onChange={(e) => onLevelChange(parseInt(e.target.value))}
+                className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-1.5 py-0.5 outline-none focus:border-cyan-500 ml-2"
+              >
+                <option disabled>Test Level</option>
+                {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
+                  <option key={l} value={l}>Lvl {l}</option>
+                ))}
+              </select>
+              <button 
+                onClick={() => setShowTestModePanel(p => !p)}
+                className={cn(
+                  "p-1 rounded transition-colors border", 
+                  showTestModePanel 
+                    ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/50" 
+                    : "bg-slate-800 text-slate-400 hover:text-cyan-400 hover:bg-slate-700 border-slate-700"
+                )}
+                title="Toggle Debug Info"
+              >
+                <Bug className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {!onLevelChange && (
+            <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 ml-2 shadow-inner">
+              {targetNodes.length} Band{targetNodes.length > 1 && 's'}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -337,6 +369,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         showTarget={isSettled}
                         listenMode={listenMode}
                         onListenModeChange={handleModeChange}
+                        showGainHint={config.showGainHint}
                     />
                 </div>
                 <LevelMeter engine={engine} isVisible={showMeter} className="w-12 border-l border-slate-800/60 bg-slate-900/40" />
@@ -409,6 +442,48 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
               </div>
             </div>
           </div>
+          
+          {onLevelChange && showTestModePanel && (
+            <div className="absolute top-16 left-4 z-[100] bg-slate-900 border border-slate-700 shadow-2xl p-4 rounded-xl mt-4 shrink-0 overflow-x-auto min-w-[500px]">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                <h3 className="text-cyan-400 font-bold text-sm">Test Mode: Level {level} Output</h3>
+                <button 
+                  onClick={() => setShowTestModePanel(false)}
+                  className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono text-slate-300 mb-4 whitespace-nowrap">
+                <div>Nodes: <span className="text-emerald-400">{config.nodesCount}</span></div>
+                <div>Gain: <span className="text-amber-400">±{config.gainRange[0]}~{config.gainRange[1]}dB</span></div>
+                <div>Q Range: <span className="text-violet-400">{config.qRange[0]}~{config.qRange[1]}</span></div>
+                <div>Hint: <span className={config.showGainHint ? "text-emerald-400" : "text-rose-400"}>{config.showGainHint ? 'Y' : 'N'}</span> | Limit: <span className={config.constrainBounds ? "text-emerald-400" : "text-rose-400"}>{config.constrainBounds ? 'Y' : 'N'}</span></div>
+              </div>
+              <table className="w-full text-left text-xs whitespace-nowrap bg-slate-950/50 rounded-lg overflow-hidden">
+                 <thead className="text-slate-500 uppercase tracking-wider">
+                    <tr>
+                       <th className="px-3 py-2 font-medium">Band</th>
+                       <th className="px-3 py-2 font-medium">Type</th>
+                       <th className="px-3 py-2 font-medium">Freq (Hz)</th>
+                       <th className="px-3 py-2 font-medium">Gain (dB)</th>
+                       <th className="px-3 py-2 font-medium">Q-Factor</th>
+                    </tr>
+                 </thead>
+                 <tbody className="text-slate-300 font-mono">
+                    {targetNodes.map((n, i) => (
+                       <tr key={n.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                          <td className="px-3 py-2 text-slate-500">#{i + 1}</td>
+                          <td className="px-3 py-2 text-indigo-300">{n.type}</td>
+                          <td className="px-3 py-2 text-amber-300">{n.freq.toFixed(0)}</td>
+                          <td className="px-3 py-2 text-emerald-300">{(n.gain > 0 ? '+' : '')}{n.gain.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-violet-300">{n.q.toFixed(2)}</td>
+                       </tr>
+                    ))}
+                 </tbody>
+              </table>
+            </div>
+          )}
       </main>
     </div>
   );

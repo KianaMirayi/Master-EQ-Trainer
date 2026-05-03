@@ -29,6 +29,7 @@ interface EQCanvasProps {
   allowAddRemoveNodes?: boolean;
   listenMode?: 'user' | 'target';
   onListenModeChange?: (mode: 'user' | 'target') => void;
+  showGainHint?: boolean;
 }
 
 // ==========================================
@@ -139,7 +140,7 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -582,22 +583,24 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       });
 
       // --- Draw Global Gain Hints ---
-      // The user hints at [3, 9] dB and [-9, -3] dB as where target might be
-      const yTop1 = gainToY(9) * dimensions.height;
-      const yTop2 = gainToY(3) * dimensions.height;
-      const yBot1 = gainToY(-3) * dimensions.height;
-      const yBot2 = gainToY(-9) * dimensions.height;
-      
-      ctx.fillStyle = TARGET_HINT_GAIN_TOP_COLOR;
-      ctx.fillRect(0, yTop1, dimensions.width, yTop2 - yTop1);
-      
-      ctx.fillStyle = TARGET_HINT_GAIN_BOT_COLOR;
-      ctx.fillRect(0, yBot1, dimensions.width, yBot2 - yBot1);
-      
-      // Draw borders for the global gain hints
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-      ctx.strokeRect(0, yTop1, dimensions.width, yTop2 - yTop1);
-      ctx.strokeRect(0, yBot1, dimensions.width, yBot2 - yBot1);
+      if (showGainHint) {
+          // The user hints at [3, 9] dB and [-9, -3] dB as where target might be
+          const yTop1 = gainToY(9) * dimensions.height;
+          const yTop2 = gainToY(3) * dimensions.height;
+          const yBot1 = gainToY(-3) * dimensions.height;
+          const yBot2 = gainToY(-9) * dimensions.height;
+          
+          ctx.fillStyle = TARGET_HINT_GAIN_TOP_COLOR;
+          ctx.fillRect(0, yTop1, dimensions.width, yTop2 - yTop1);
+          
+          ctx.fillStyle = TARGET_HINT_GAIN_BOT_COLOR;
+          ctx.fillRect(0, yBot1, dimensions.width, yBot2 - yBot1);
+          
+          // Draw borders for the global gain hints
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeRect(0, yTop1, dimensions.width, yTop2 - yTop1);
+          ctx.strokeRect(0, yBot1, dimensions.width, yBot2 - yBot1);
+      }
 
       // --- Draw Spectrum ---
       const drawSpectrum = (data: Float32Array, colorGr: string, envelopeRef: React.MutableRefObject<Float32Array | null>, strokeColor?: string) => {
