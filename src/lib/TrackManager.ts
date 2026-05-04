@@ -12,12 +12,12 @@ export interface Track {
 }
 
 export const BUILT_IN_TRACKS: Track[] = [
-    { id: 'builtin-1', name: 'Da Capo', artist: 'HOYO-MiX', url: '/Da Capo - HOYO-MiX.mp3', isCustom: false },
-    { id: 'builtin-2', name: 'Had I Not Seen the Sun', artist: 'HOYO-MiX', url: '/Had I Not Seen the Sun.mp3', isCustom: false },
-    { id: 'builtin-3', name: 'If I can Stop One Heart From Breaking', artist: 'HOYO-MiX', url: '/If I can Stop One Heart From Breaking.mp3', isCustom: false },
-    { id: 'builtin-4', name: 'Hope Is the Thing With Feathers', artist: 'HOYO-MiX', url: '/Hope Is the Thing With Feathers.mp3', isCustom: false },
-    { id: 'builtin-5', name: 'Sway to My Beat in Cosmos', artist: 'HOYO-MiX', url: '/Sway to My Beat in Cosmos.mp3', isCustom: false },
-    { id: 'builtin-6', name: 'prettyjohn1', artist: 'prettyjohn1', url: '/prettyjohn1.mp3', isCustom: false },
+    { id: 'builtin-1', name: 'Da Capo', artist: 'HOYO-MiX', url: './Da Capo - HOYO-MiX.mp3', isCustom: false },
+    { id: 'builtin-2', name: 'Had I Not Seen the Sun', artist: 'HOYO-MiX', url: './Had I Not Seen the Sun.mp3', isCustom: false },
+    { id: 'builtin-3', name: 'If I can Stop One Heart From Breaking', artist: 'HOYO-MiX', url: './If I can Stop One Heart From Breaking.mp3', isCustom: false },
+    { id: 'builtin-4', name: 'Hope Is the Thing With Feathers', artist: 'HOYO-MiX', url: './Hope Is the Thing With Feathers.mp3', isCustom: false },
+    { id: 'builtin-5', name: 'Sway to My Beat in Cosmos', artist: 'HOYO-MiX', url: './Sway to My Beat in Cosmos.mp3', isCustom: false },
+    { id: 'builtin-6', name: 'prettyjohn1', artist: 'prettyjohn1', url: './prettyjohn1.mp3', isCustom: false },
 ];
 
 const STORE_KEY = 'custom-tracks-v2';
