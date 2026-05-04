@@ -371,7 +371,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
             </div>
             
             <div className="flex-1 min-h-0 relative flex">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 min-h-0 relative">
                     <EQCanvas 
                         engine={engine}
                         userNodes={userNodes}

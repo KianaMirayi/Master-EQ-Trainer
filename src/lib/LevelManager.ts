@@ -1,4 +1,5 @@
 import { EQNodeData } from './utils';
+import levelsData from './levels.json';
 
 export interface LevelConfig {
   nodeDistribution: { 
@@ -40,36 +41,31 @@ export const GROUP_POOLS: Record<string, string[]> = {
 export class LevelManager {
   
   static getLevelConfig(level: number): LevelConfig {
-    if (level <= 9) return this.createConfig(1, 'AA,AB,AC', 'BELL', '100%BELL', [6, 9], [0.7, 1], true, true);
-    if (level === 10) return this.createConfig(1, 'AA,AB,AC', 'BELL', '100%BELL', [6, 9], [0.7, 1], false, true);
-    if (level <= 19) return this.createConfig(2, 'A', 'BELL', '100%BELL', [6, 9], [2, 3], true, true);
-    if (level === 20) return this.createConfig(2, 'A', 'BELL', '100%BELL', [3, 6], [2, 3], true, true);
-    if (level <= 29) return this.createConfig(2, 'A', 'BELL', '100%BELL', [6, 9], [1, 3], true, true);
-    if (level === 30) return this.createConfig(3, 'A', 'BELL', '100%BELL', [6, 9], [1, 3], true, true);
-    if (level <= 39) return this.createConfig(3, 'AA,AD,BD,BB', 'BELL', '100%BELL', [6, 9], [1.5, 3], true, true);
-    if (level === 40) return this.createConfig(3, 'AA,AD,BD,BB', 'BELL', '100%BELL', [3, 6], [1, 2], true, true);
-    if (level <= 49) return this.createConfig(3, 'A,B', 'BELL', '100%BELL', [3, 6], [1.5, 3], true, true);
-    if (level === 50) return this.createConfig(3, 'A,B', 'BELL', '100%BELL', [3, 6], [1, 2], false, true);
-    if (level <= 59) return this.createConfig(3, 'AA,BA,BC,CA', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [0.7, 3], true, true);
-    if (level === 60) return this.createConfig(3, 'BA,BC,CA,AA', 'BELL', '70%BELL,30%SHELF', [1, 3], [0.7, 3], true, true);
-    if (level <= 69) return this.createConfig(4, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [3, 5], true, true);
-    if (level === 70) return this.createConfig(4, 'A,B,C', 'BELL', '70%BELL,30%SHELF', [3, 6], [3, 5], false, true);
-    if (level <= 79) {
-      const mid = Math.random() > 0.5 ? 1 : 0;
-      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [5, 8], true, true);
+    const levelsArr = levelsData.levels;
+    const configData = levelsArr.find(d => level >= d.levels[0] && level <= d.levels[1]) || levelsArr[levelsArr.length - 1];
+    
+    // Process node distribution (resolve -1 for random choice)
+    let mid = configData.nodeDistribution.mid;
+    let side = configData.nodeDistribution.side;
+    if (mid === -1 && side === -1) {
+        mid = Math.random() > 0.5 ? 1 : 0;
+        side = 1 - mid;
     }
-    if (level === 80) {
-      const mid = Math.random() > 0.5 ? 1 : 0;
-      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL', '70%BELL,30%SHELF', [1, 3], [5, 8], true, false);
-    }
-    if (level <= 89) {
-      const mid = Math.random() > 0.5 ? 1 : 0;
-      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], true, false);
-    }
-    if (level === 90) return this.createConfig({ stereo: 3, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], false, false);
-    if (level <= 99) return this.createConfig({ stereo: 4, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [4, 8], true, false);
-    // 100 fallback
-    return this.createConfig({ stereo: 4, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [3, 8], false, false);
+    
+    return {
+        nodeDistribution: {
+            stereo: configData.nodeDistribution.stereo,
+            mid,
+            side
+        },
+        allowedFilters: configData.allowedFilters,
+        filterWeights: configData.filterWeights,
+        freqPools: configData.freqPools,
+        gainRange: configData.gainRange as [number, number],
+        qRange: configData.qRange as [number, number],
+        showGainHint: configData.showGainHint,
+        constrainBounds: configData.constrainBounds
+    };
   }
 
   static generateLevelTargets(level: number): { targets: EQNodeData[], netGain: number } {

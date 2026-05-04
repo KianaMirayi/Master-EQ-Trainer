@@ -358,7 +358,7 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
         <div className="absolute top-4 left-4 z-30 pointer-events-none text-slate-500 text-xs bg-slate-900/50 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-800/50">
           Double-click on empty space to add nodes (up to 10). Select a node and click the Trash icon to remove.
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 min-h-0 relative">
           {engine && (
             <EQCanvas 
               engine={engine}
