@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X, Power } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
-import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
+import { EQNodeData, cn } from '../lib/utils';
+import { calculateLevelScore, LevelScoreReport } from '../lib/ScoreCalculator';
 import { LevelManager } from '../lib/LevelManager';
 import { EQCanvas, BAND_COLORS } from './EQCanvas';
 import { LevelMeter } from './LevelMeter';
@@ -39,8 +40,8 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
 interface GameViewProps {
   level: number;
   selectedTrackId: string;
-  onLevelComplete: (score: number) => void;
-  onRetry: (score: number) => void;
+  onLevelComplete: (score: number, stars: number) => void;
+  onRetry: (score: number, stars: number) => void;
   onBack: () => void;
   onLevelChange?: (level: number) => void;
 }
@@ -54,7 +55,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [userNodes, setUserNodes] = useState<EQNodeData[]>([]);
   const [listenMode, setListenMode] = useState<'target' | 'user'>('user');
   const [isSettled, setIsSettled] = useState(false);
-  const [score, setScore] = useState<number | null>(null);
+  const [scoreReport, setScoreReport] = useState<LevelScoreReport | null>(null);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [trackName, setTrackName] = useState<string>('');
@@ -126,7 +127,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       engine!.setListenMode('user');
       setListenMode('user');
       setIsSettled(false);
-      setScore(null);
+      setScoreReport(null);
 
       if (tToPlay) {
           try {
@@ -218,19 +219,19 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
 
   const handleSubmit = () => {
     if (!engine) return;
-    const s = calculateMatchScore(userNodes, targetNodes);
-    setScore(s);
+    const report = calculateLevelScore(targetNodes, userNodes, level);
+    setScoreReport(report);
     setIsSettled(true);
     // Switch to user mode upon settlement to let them tweak and compare
     handleModeChange('user');
   };
 
   const handleNext = () => {
-    if (score !== null) {
-      if (score >= 72) {
-        onLevelComplete(score);
+    if (scoreReport !== null) {
+      if (scoreReport.stars >= 1) { // 1 star is passing
+        onLevelComplete(scoreReport.totalScore, scoreReport.stars);
       } else {
-        onRetry(score);
+        onRetry(scoreReport.totalScore, scoreReport.stars);
         setRetryTrigger(r => r + 1);
       }
     }
@@ -324,15 +325,22 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                 <span className="text-slate-400 text-sm">Match:</span>
                 <span className={cn(
                   "font-mono font-bold text-lg",
-                  score! >= 72 ? "text-emerald-400" : "text-red-400"
-                )}>{score}%</span>
+                  scoreReport!.stars >= 1 ? "text-emerald-400" : "text-red-400"
+                )}>{scoreReport!.totalScore}</span>
+                <div className="flex">
+                  {[1, 2, 3].map(i => (
+                    <svg key={i} className={cn("w-4 h-4", i <= scoreReport!.stars ? "text-amber-400" : "text-slate-600")} fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                    </svg>
+                  ))}
+                </div>
               </div>
               <button 
                 onClick={handleNext}
                 className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold px-6 py-2 rounded-md shadow-lg transition flex items-center gap-2"
               >
-                {score! >= 72 ? 'Next Level' : 'Retry'}
-                {score! >= 72 ? <FastForward className="w-4 h-4" /> : <RotateCcw className="w-4 h-4" />}
+                {scoreReport!.stars >= 1 ? 'Next Level' : 'Retry'}
+                {scoreReport!.stars >= 1 ? <FastForward className="w-4 h-4" /> : <RotateCcw className="w-4 h-4" />}
               </button>
             </div>
           )}
@@ -349,14 +357,56 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           
           {/* Settled Feedback Overlay */}
           {isSettled && (
-            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-                <div className="bg-slate-900/80 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
-                  {score! >= 72 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <RotateCcw className="w-5 h-5 text-rose-400" />}
-                  <span className="font-medium text-slate-200">
-                      {score! >= 72 ? "Good job! Review the curves below." : "Not quite. Check the difference."}
-                  </span>
+            <>
+              <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                  <div className="bg-slate-900/80 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
+                    {scoreReport!.stars >= 1 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <RotateCcw className="w-5 h-5 text-rose-400" />}
+                    <span className="font-medium text-slate-200">
+                        {scoreReport!.stars >= 1 ? "Good job! Review the curves below." : "Not quite. Check the difference."}
+                    </span>
+                  </div>
+              </div>
+
+              {/* Detailed Score Report */}
+              <div className="absolute top-24 right-4 z-20 w-[300px] max-w-[calc(100vw-2rem)] bg-slate-900/90 border border-slate-700/60 rounded-xl p-4 backdrop-blur-md shadow-2xl overflow-y-auto max-h-[50vh] pointer-events-auto">
+                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  Score Report
+                </h3>
+                <div className="space-y-3">
+                  {scoreReport!.nodeReports.map((r, i) => (
+                      <div key={i} className="bg-slate-800/50 rounded-lg p-3 text-xs border border-slate-800">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="font-mono text-cyan-400 font-semibold">{Math.round(r.targetNode.freq)}Hz Target</span>
+                            <span className={cn("font-bold px-1.5 py-0.5 rounded", r.isVetoed ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400")}>
+                              {r.isVetoed ? '0 pts (VETO)' : `${Math.round(r.baseScore)} pts`}
+                            </span>
+                          </div>
+                          {r.isVetoed ? (
+                            <div className="text-red-400/80 mb-1">{r.vetoReason}</div>
+                          ) : (
+                            <div className="text-slate-400 grid grid-cols-3 gap-1 mb-1 font-mono text-[10px]">
+                              <div>Sf: {Math.round(r.Sf)}</div>
+                              <div>Sg: {Math.round(r.Sg)}</div>
+                              <div>Sq: {Math.round(r.Sq)}</div>
+                            </div>
+                          )}
+                          <div className="text-slate-500 mt-1.5 flex justify-between items-center pt-1.5 border-t border-slate-800/60">
+                            <span>Weight: x{r.weight}</span>
+                            {r.userNode && <span>User: {Math.round(r.userNode.freq)}Hz</span>}
+                          </div>
+                      </div>
+                  ))}
+                  <div className="pt-3 border-t border-slate-700 font-bold flex justify-between items-center text-sm">
+                      <span className="text-slate-300">Weighted Total</span>
+                      <span className={cn(
+                        "text-lg",
+                        scoreReport!.stars >= 1 ? "text-emerald-400" : "text-amber-400"
+                      )}>{scoreReport!.totalScore}</span>
+                  </div>
                 </div>
-            </div>
+              </div>
+            </>
           )}
 
           {/* Canvas Wrapper */}

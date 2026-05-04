@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameView } from './components/GameView';
 import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
-import { cn } from './lib/utils';
+import { EQNodeData, cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
+import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
 
 import { CalibrationSettings } from './components/CalibrationEditor';
 
@@ -15,7 +16,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration'>('dashboard');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
-  const [scores, setScores] = useState<LevelScore[]>([]);
+  const [records, setRecords] = useState<Record<number, LevelRecord>>({});
   const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
   const [selectedTrackId, setSelectedTrackId] = useState<string>('random-builtin');
   const [isUploading, setIsUploading] = useState(false);
@@ -28,10 +29,7 @@ export default function App() {
     TrackManager.init().then(() => {
       setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
     });
-    const saved = localStorage.getItem('eq_trainer_scores');
-    if (saved) {
-      try { setScores(JSON.parse(saved)); } catch (e) {}
-    }
+    setRecords(ProgressionManager.getRecords());
   }, []);
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>, droppedFiles?: FileList) => {
@@ -109,36 +107,40 @@ export default function App() {
   };
 
   // Save to local storage
-  const saveScore = (level: number, score: number) => {
-    setScores(prev => {
-      const existing = prev.find(s => s.level === level);
-      let newScores;
-      if (existing) {
-        newScores = prev.map(s => s.level === level ? { ...s, score: Math.max(s.score, score) } : s);
-      } else {
-        newScores = [...prev, { level, score }];
-      }
-      localStorage.setItem('eq_trainer_scores', JSON.stringify(newScores));
-      return newScores;
-    });
+  const saveScore = (level: number, score: number, stars: number) => {
+    ProgressionManager.saveRecord(level, score, stars);
+    setRecords(ProgressionManager.getRecords());
   };
 
-  const highestUnlocked = Math.max(1, ...scores.filter(s => s.score >= 72).map(s => s.level + 1));
-  const masteryScore = scores.reduce((sum, s) => sum + s.score, 0);
+  const passedLevels = Object.keys(records).map(Number).filter((l) => records[l].passed);
+  const highestUnlocked = Math.max(1, ...passedLevels.map((l) => l + 1));
+  const masteryScore = Object.values(records).reduce((sum: number, r: any) => sum + (r.score || 0), 0);
 
   const handleLevelSelect = (level: number, testMode: boolean = false) => {
+    if (!testMode) {
+      const check = ProgressionManager.checkEnterLevel(level) as any;
+      if (!check.allowed) {
+        if (check.reason === 'STAR_GATE_LOCKED') {
+          alert(`${check.message}\n建议优先挑战拿星较少的关卡以提高整体星数：第 ${check.suggestedReviewLevels?.join(', ') || '前几'} 关`);
+        } else {
+          alert(check.message || check.reason);
+        }
+        return;
+      }
+    }
+    
     setIsTestMode(testMode);
     setActiveLevel(level);
     setCurrentView('game');
   };
 
-  const handleLevelComplete = (score: number) => {
-    saveScore(activeLevel, score);
-    if (score >= 72) {
-      // Go to next level magically
-      setActiveLevel(prev => prev + 1);
+  const handleLevelComplete = (score: number, stars: number) => {
+    saveScore(activeLevel, score, stars);
+    
+    const nextLevel = activeLevel + 1;
+    if (ProgressionManager.checkEnterLevel(nextLevel).allowed) {
+      setActiveLevel(nextLevel);
     } else {
-      // Just go back to dashboard if they didn't want to retry immediately
       setCurrentView('dashboard');
     }
   };
@@ -149,7 +151,7 @@ export default function App() {
         level={activeLevel} 
         selectedTrackId={selectedTrackId} 
         onLevelComplete={handleLevelComplete} 
-        onRetry={(score) => saveScore(activeLevel, score)}
+        onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
         onBack={() => {
            setIsTestMode(false);
            setCurrentView('dashboard');
@@ -242,9 +244,11 @@ export default function App() {
           
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4">
             {levelsParams.map(level => {
-              const isUnlocked = level <= highestUnlocked;
-              const levelScore = scores.find(s => s.level === level)?.score;
-              const isPassed = (levelScore ?? 0) >= 72;
+              const check = ProgressionManager.checkEnterLevel(level);
+              const isUnlocked = check.allowed;
+              const record = records[level];
+              const isPassed = record?.passed;
+              const isBoss = ProgressionManager.isBossLevel(level);
               
               return (
                 <button
@@ -256,26 +260,37 @@ export default function App() {
                     isUnlocked 
                       ? "bg-slate-900 hover:bg-slate-800 hover:-translate-y-1 shadow-lg border border-slate-700/50 cursor-pointer" 
                       : "bg-slate-900/40 border border-slate-800/50 opacity-60 cursor-not-allowed",
-                    isPassed && "border-emerald-500/30 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+                    isPassed && "border-emerald-500/30 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]",
+                    isBoss && "ring-2 ring-amber-500/50"
                   )}
+                  title={!isUnlocked && !isPassed ? (check as any).message || (check as any).reason : ""}
                 >
                   {isUnlocked ? (
                     <span className={cn(
                       "text-2xl font-bold font-mono tracking-tighter",
-                      isPassed ? "text-emerald-400" : "text-slate-200"
+                      isPassed ? "text-emerald-400" : (isBoss ? "text-amber-400" : "text-slate-200")
                     )}>{level}</span>
                   ) : (
                     <Lock className="w-6 h-6 text-slate-600 mb-1" />
                   )}
                   
                   {isUnlocked && (
-                    <div className="mt-1 text-[10px] font-medium tracking-widest uppercase">
-                      {levelScore !== undefined ? (
-                        <span className={isPassed ? "text-emerald-500" : "text-amber-500"}>
-                          {levelScore}%
-                        </span>
+                    <div className="mt-0 flex flex-col items-center gap-1">
+                      {record !== undefined ? (
+                        <>
+                          <div className={cn("text-[10px] font-bold", isPassed ? "text-emerald-500" : "text-amber-500")}>
+                            {record.score} pts
+                          </div>
+                          <div className="flex items-center justify-center gap-0.5">
+                            {[1, 2, 3].map(i => (
+                              <svg key={i} className={cn("w-2.5 h-2.5", i <= record.stars ? "text-amber-400" : "text-slate-700")} fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                              </svg>
+                            ))}
+                          </div>
+                        </>
                       ) : (
-                        <span className="text-slate-500">NEW</span>
+                        <span className="text-[10px] font-medium tracking-widest text-slate-500 uppercase mt-1">NEW</span>
                       )}
                     </div>
                   )}
