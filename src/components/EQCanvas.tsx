@@ -30,6 +30,7 @@ interface EQCanvasProps {
   listenMode?: 'user' | 'target';
   onListenModeChange?: (mode: 'user' | 'target') => void;
   showGainHint?: boolean;
+  gainRange?: [number, number];
 }
 
 // ==========================================
@@ -140,7 +141,7 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9] }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -584,11 +585,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
       // --- Draw Global Gain Hints ---
       if (showGainHint) {
-          // The user hints at [3, 9] dB and [-9, -3] dB as where target might be
-          const yTop1 = gainToY(9) * dimensions.height;
-          const yTop2 = gainToY(3) * dimensions.height;
-          const yBot1 = gainToY(-3) * dimensions.height;
-          const yBot2 = gainToY(-9) * dimensions.height;
+          const yTop1 = gainToY(gainRange[1]) * dimensions.height;
+          const yTop2 = gainToY(gainRange[0]) * dimensions.height;
+          const yBot1 = gainToY(-gainRange[0]) * dimensions.height;
+          const yBot2 = gainToY(-gainRange[1]) * dimensions.height;
           
           ctx.fillStyle = TARGET_HINT_GAIN_TOP_COLOR;
           ctx.fillRect(0, yTop1, dimensions.width, yTop2 - yTop1);
@@ -803,9 +803,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
         // --- LAYER 1: Global Curves ---
         ctx.save();
+        ctx.setLineDash(dashes);
         
-        if (!isTarget && isPureStereo) {
-            ctx.setLineDash(dashes);
+        if (isPureStereo) {
             // Fast Path: Pure Stereo
             ctx.lineWidth = 2.5 * 2.5; 
             ctx.globalAlpha = 0.25;
@@ -829,67 +829,16 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
-        } else if (isTarget) {
-            ctx.setLineDash(dashes);
-            
-            if (isPureStereo) {
-                 // Fast Path: Pure Stereo for Target (Original Style with glow)
-                 ctx.lineWidth = 2.5 * 2.5; 
-                 ctx.globalAlpha = 0.25;
-                 ctx.strokeStyle = color;
-                 ctx.beginPath();
-                 for (let x = 0; x < dimensions.width; x++) {
-                     const db = midResponse[x];
-                     const y = gainToY(db) * dimensions.height;
-                     if (x === 0) ctx.moveTo(x, y);
-                     else ctx.lineTo(x, y);
-                 }
-                 ctx.stroke();
-
-                 ctx.globalAlpha = 1.0;
-                 ctx.lineWidth = 2.5;
-                 ctx.beginPath();
-                 for (let x = 0; x < dimensions.width; x++) {
-                    const db = midResponse[x];
-                    const y = gainToY(db) * dimensions.height;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                 }
-                 ctx.stroke();
-            } else {
-                 ctx.lineWidth = 2.5;
-                 // Target M/S Path - distinct colors to visualize mid and side clearly
-                 // Draw Mid Curve
-                 ctx.strokeStyle = '#22c55e'; // Green for Target Mid
-                 ctx.beginPath();
-                 for (let x = 0; x < dimensions.width; x++) {
-                    const db = midResponse[x];
-                    const y = gainToY(db) * dimensions.height;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                 }
-                 ctx.stroke();
-                 
-                 // Draw Side Curve
-                 ctx.strokeStyle = '#3b82f6'; // Blue for Target Side
-                 ctx.beginPath();
-                 for (let x = 0; x < dimensions.width; x++) {
-                    const db = sideResponse[x];
-                    const y = gainToY(db) * dimensions.height;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                 }
-                 ctx.stroke();
-            }
         } else {
             // Advanced Path: M/S Delta Fusion
             const MERGE_THRESHOLD = 0.5;
 
             // Alpha logic
-            let midBaseAlpha = 0.8, sideBaseAlpha = 0.8;
+            let midBaseAlpha = isTarget ? 0.6 : 0.8;
+            let sideBaseAlpha = isTarget ? 0.6 : 0.8;
             let midLineWidth = 2, sideLineWidth = 2;
             
-            if (selectedNodeIdx !== null) {
+            if (!isTarget && selectedNodeIdx !== null) {
                 if (selectedMode === 'Mid') {
                     midBaseAlpha = 1.0; midLineWidth = 3;
                     sideBaseAlpha = 0.2; sideLineWidth = 2;
@@ -907,8 +856,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 return `rgba(${r}, ${g}, ${b}, ${a})`;
             };
 
-            const midYellow: [number, number, number, number] = [234, 179, 8, midBaseAlpha];
-            const sideYellowMerged: [number, number, number, number] = [234, 179, 8, 0];
+            const baseColorRGB: [number, number, number] = isTarget ? [168, 85, 247] : [234, 179, 8];
+
+            const midBase: [number, number, number, number] = [...baseColorRGB, midBaseAlpha] as [number, number, number, number];
+            const sideBaseMerged: [number, number, number, number] = [...baseColorRGB, 0] as [number, number, number, number];
             
             const GREEN: [number, number, number, number] = [34, 197, 94, midBaseAlpha];
             const BLUE: [number, number, number, number] = [59, 130, 246, sideBaseAlpha];
@@ -923,16 +874,16 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                     const delta = Math.abs(midResponse[x] - sideResponse[x]);
                     let factor = Math.min(1, delta / MERGE_THRESHOLD);
                     const offset = x / (dimensions.width - 1);
-                    midGradient.addColorStop(offset, interpolateColor(midYellow, GREEN, factor));
-                    sideGradient.addColorStop(offset, interpolateColor(sideYellowMerged, BLUE, factor));
+                    midGradient.addColorStop(offset, interpolateColor(midBase, GREEN, factor));
+                    sideGradient.addColorStop(offset, interpolateColor(sideBaseMerged, BLUE, factor));
                     lastOffset = offset;
                 }
                 if (lastOffset < 1) {
                     const x = dimensions.width - 1;
                     const delta = Math.abs(midResponse[x] - sideResponse[x]);
                     let factor = Math.min(1, delta / MERGE_THRESHOLD);
-                    midGradient.addColorStop(1, interpolateColor(midYellow, GREEN, factor));
-                    sideGradient.addColorStop(1, interpolateColor(sideYellowMerged, BLUE, factor));
+                    midGradient.addColorStop(1, interpolateColor(midBase, GREEN, factor));
+                    sideGradient.addColorStop(1, interpolateColor(sideBaseMerged, BLUE, factor));
                 }
             }
 

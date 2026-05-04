@@ -1,7 +1,11 @@
 import { EQNodeData } from './utils';
 
 export interface LevelConfig {
-  nodesCount: number;
+  nodeDistribution: { 
+    stereo: number; 
+    mid: number; 
+    side: number; 
+  };
   allowedFilters: string[];
   filterWeights: Record<string, number>;
   freqPools: string[];
@@ -47,19 +51,28 @@ export class LevelManager {
     if (level <= 49) return this.createConfig(3, 'A,B', 'BELL', '100%BELL', [3, 6], [1.5, 3], true, true);
     if (level === 50) return this.createConfig(3, 'A,B', 'BELL', '100%BELL', [3, 6], [1, 2], false, true);
     if (level <= 59) return this.createConfig(3, 'AA,BA,BC,CA', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [0.7, 3], true, true);
-    if (level === 60) return this.createConfig(3, 'BA,BC,CA,AA', 'BELL', '100%BELL', [1, 3], [0.7, 3], true, true); // table says BELL,,1-3 for level 60
+    if (level === 60) return this.createConfig(3, 'BA,BC,CA,AA', 'BELL', '70%BELL,30%SHELF', [1, 3], [0.7, 3], true, true);
     if (level <= 69) return this.createConfig(4, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [3, 5], true, true);
-    if (level === 70) return this.createConfig(4, 'A,B,C', 'BELL', '100%BELL', [3, 6], [3, 5], false, true);
-    if (level <= 79) return this.createConfig(4, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [5, 8], true, true);
-    if (level === 80) return this.createConfig(4, 'A,B,C', 'BELL', '100%BELL', [1, 3], [5, 8], true, false);
-    if (level <= 89) return this.createConfig(4, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], true, false);
-    if (level === 90) return this.createConfig(5, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], false, false);
-    if (level <= 99) return this.createConfig(6, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [4, 8], true, false);
+    if (level === 70) return this.createConfig(4, 'A,B,C', 'BELL', '70%BELL,30%SHELF', [3, 6], [3, 5], false, true);
+    if (level <= 79) {
+      const mid = Math.random() > 0.5 ? 1 : 0;
+      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [5, 8], true, true);
+    }
+    if (level === 80) {
+      const mid = Math.random() > 0.5 ? 1 : 0;
+      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL', '70%BELL,30%SHELF', [1, 3], [5, 8], true, false);
+    }
+    if (level <= 89) {
+      const mid = Math.random() > 0.5 ? 1 : 0;
+      return this.createConfig({ stereo: 3, mid, side: 1 - mid }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], true, false);
+    }
+    if (level === 90) return this.createConfig({ stereo: 3, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [3, 6], [4, 8], false, false);
+    if (level <= 99) return this.createConfig({ stereo: 4, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [4, 8], true, false);
     // 100 fallback
-    return this.createConfig(6, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [3, 8], false, false);
+    return this.createConfig({ stereo: 4, mid: 1, side: 1 }, 'A,B,C', 'BELL,SHELF', '70%BELL,30%SHELF', [1, 3], [3, 8], false, false);
   }
 
-  static generateLevelTargets(level: number): EQNodeData[] {
+  static generateLevelTargets(level: number): { targets: EQNodeData[], netGain: number } {
     const config = this.getLevelConfig(level);
     const nodes: EQNodeData[] = [];
 
@@ -67,7 +80,14 @@ export class LevelManager {
     let availablePools = [...config.freqPools];
     if (availablePools.length === 0) availablePools = Object.keys(SUB_POOLS); // fallback
 
-    for (let i = 0; i < config.nodesCount; i++) {
+    const modesToGenerate: Array<'Stereo' | 'Mid' | 'Side'> = [
+        ...Array(config.nodeDistribution.stereo).fill('Stereo'),
+        ...Array(config.nodeDistribution.mid).fill('Mid'),
+        ...Array(config.nodeDistribution.side).fill('Side')
+    ];
+
+    let tIdx = 0;
+    for (const stereoMode of modesToGenerate) {
         // Find a valid frequency that is at least 1 octave apart from existing nodes
         let freq = 1000;
         let pName = availablePools[0];
@@ -76,17 +96,28 @@ export class LevelManager {
 
         while (!foundValid && attempts < 50) {
             attempts++;
-            // pick a random pool
-            pName = availablePools[Math.floor(Math.random() * availablePools.length)];
-            const [minF, maxF] = SUB_POOLS[pName] || [200, 500];
+            let minF = 200, maxF = 500;
+
+            if (stereoMode === 'Mid') {
+                // Rule 2 for Mid: Force from 100-500Hz
+                minF = 100;
+                maxF = 500;
+            } else if (stereoMode === 'Side') {
+                // Rule 2 for Side: Force from 6k-16kHz
+                minF = 6000;
+                maxF = 16000;
+            } else {
+                // pick a random pool
+                pName = availablePools[Math.floor(Math.random() * availablePools.length)];
+                [minF, maxF] = SUB_POOLS[pName] || [200, 500];
+            }
 
             // random frequency in log scale within the pool
             const logMin = Math.log10(minF);
             const logMax = Math.log10(maxF);
             freq = Math.pow(10, logMin + Math.random() * (logMax - logMin));
 
-            // check octave spacing (f >= 1.5 * f_existing or f <= f_existing / 1.5)
-            // 1 octave is 2x, but for 6 nodes it might be too tight, so we use 1.5x (about 0.6 octaves)
+            // check spacing (about 0.6 octaves)
             let tooClose = false;
             for (const n of nodes) {
                 if (freq > n.freq / 1.5 && freq < n.freq * 1.5) {
@@ -95,7 +126,7 @@ export class LevelManager {
                 }
             }
 
-            if (!tooClose) {
+            if (!tooClose || attempts > 45) {
                 foundValid = true;
             }
         }
@@ -117,20 +148,52 @@ export class LevelManager {
         const gainMagnitude = config.gainRange[0] + Math.random() * (config.gainRange[1] - config.gainRange[0]);
         const gain = sign * gainMagnitude;
 
-        // Determine Q
-        const q = config.qRange[0] + Math.random() * (config.qRange[1] - config.qRange[0]);
+        // Rule 1: M/S Q Range override
+        let q = 1.0;
+        if (stereoMode === 'Mid' || stereoMode === 'Side') {
+            q = 1.0 + Math.random() * 2.0;
+        } else {
+            q = config.qRange[0] + Math.random() * (config.qRange[1] - config.qRange[0]);
+        }
 
         nodes.push({
-            id: `target_lvl${level}_b${i}`,
+            id: `target_lvl${level}_b${tIdx}`,
             type,
             freq,
             gain,
-            q: type === 'lowshelf' || type === 'highshelf' ? 1.0 : q,
-            stereoMode: 'Stereo'
+            q,
+            stereoMode
         });
+        tIdx++;
     }
 
-    return nodes.sort((a, b) => a.freq - b.freq);
+    nodes.sort((a, b) => a.freq - b.freq);
+
+    // Rule 3: SHELF physical lock
+    for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.type === 'lowshelf' || n.type === 'highshelf') {
+            if (i === 0) {
+                n.type = 'lowshelf';
+            } else if (i === nodes.length - 1) {
+                n.type = 'highshelf';
+            } else {
+                n.type = 'peaking';
+            }
+        }
+        
+        // Force Q to 1.0 for any shelf filter
+        if (n.type === 'lowshelf' || n.type === 'highshelf') {
+            n.q = 1.0;
+        }
+    }
+
+    let netGain = 0;
+    for (const n of nodes) {
+        netGain += n.gain;
+    }
+
+    return { targets: nodes, netGain };
   }
 
   static generateUserInitial(targets: EQNodeData[], level: number): EQNodeData[] {
@@ -214,9 +277,10 @@ export class LevelManager {
   }
 
   private static createConfig(
-      nodesCount: number, poolStr: string, filterStr: string, weightStr: string, 
+      dist: number | {stereo: number, mid: number, side: number}, poolStr: string, filterStr: string, weightStr: string, 
       gainRange: [number, number], qRange: [number, number], showHint: boolean, constrain: boolean
   ): LevelConfig {
+      const nodeDistribution = typeof dist === 'number' ? { stereo: dist, mid: 0, side: 0 } : dist;
       const pools = poolStr.split(',').flatMap(p => GROUP_POOLS[p] ? GROUP_POOLS[p] : [p]);
       const allowedFilters = filterStr.split(',').map(f => f.trim().toLowerCase());
       
@@ -234,7 +298,7 @@ export class LevelManager {
       }
 
       return {
-          nodesCount,
+          nodeDistribution,
           allowedFilters,
           filterWeights,
           freqPools: pools,

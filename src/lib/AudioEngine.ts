@@ -14,9 +14,6 @@ export class AudioEngine {
   soloGain: GainNode;
   soloFilter: BiquadFilterNode;
   
-  targetMakeupGain: GainNode;
-  userMakeupGain: GainNode;
-  
   masterGain: GainNode;
   compressor: DynamicsCompressorNode;
   
@@ -77,12 +74,6 @@ export class AudioEngine {
     this.soloFilter.type = 'bandpass';
     this.soloFilter.connect(this.soloGain);
     
-    this.targetMakeupGain = this.ctx.createGain();
-    this.userMakeupGain = this.ctx.createGain();
-    
-    this.targetMakeupGain.connect(this.targetGain);
-    this.userMakeupGain.connect(this.userGain);
-    
     this.targetGain.connect(this.masterGain);
     this.userGain.connect(this.masterGain);
     this.soloGain.connect(this.masterGain);
@@ -140,14 +131,14 @@ export class AudioEngine {
       if (this.targetGraph) {
         this.source.connect(this.targetGraph.input);
       } else {
-        this.source.connect(this.targetMakeupGain);
+        this.source.connect(this.targetGain);
         this.source.connect(this.targetAnalyser);
       }
 
       if (this.userGraph) {
         this.source.connect(this.userGraph.input);
       } else {
-        this.source.connect(this.userMakeupGain);
+        this.source.connect(this.userGain);
         this.source.connect(this.userAnalyser);
       }
 
@@ -406,15 +397,13 @@ export class AudioEngine {
       }
       
       if (isTarget) {
-        newGraph.output.connect(this.targetMakeupGain);
+        newGraph.output.connect(this.targetGain);
         newGraph.output.connect(this.targetAnalyser);
       } else {
-        newGraph.output.connect(this.userMakeupGain);
+        newGraph.output.connect(this.userGain);
         newGraph.output.connect(this.userAnalyser);
       }
     }
-
-    this.calculateAutoMakeupGain(isTarget);
   }
 
   setTargetNodes(nodes: EQNodeData[]) {
@@ -457,7 +446,6 @@ export class AudioEngine {
           sideF.Q.value = n.q;
         }
       });
-      this.calculateAutoMakeupGain(false);
     } else {
       this.applyNodes(nodes, false);
     }
@@ -489,60 +477,6 @@ export class AudioEngine {
       const gainLinear = Math.pow(10, gainDb / 20);
       this.calibrationOutput.gain.setTargetAtTime(gainLinear, this.ctx.currentTime, 0.05);
     }
-  }
-
-  // Calculate generic response across spectrum
-  private calculateAutoMakeupGain(isTarget: boolean) {
-    const graph = isTarget ? this.targetGraph : this.userGraph;
-    if (!graph || graph.midFilters.length === 0) {
-      const makeUpNode = isTarget ? this.targetMakeupGain : this.userMakeupGain;
-      makeUpNode.gain.cancelScheduledValues(this.ctx.currentTime);
-      makeUpNode.gain.setValueAtTime(1, this.ctx.currentTime);
-      return;
-    }
-
-    const steps = 100;
-    const freqs = new Float32Array(steps);
-    for (let i = 0; i < steps; i++) {
-        const minLog = Math.log10(MIN_FREQ);
-        const maxLog = Math.log10(MAX_FREQ);
-        freqs[i] = Math.pow(10, minLog + (i / (steps-1)) * (maxLog - minLog));
-    }
-
-    const midTotalMag = new Float32Array(steps).fill(1);
-    const sideTotalMag = new Float32Array(steps).fill(1);
-    const mag = new Float32Array(steps);
-    const phase = new Float32Array(steps);
-
-    graph.midFilters.forEach(f => {
-        f.getFrequencyResponse(freqs, mag, phase);
-        for(let i = 0; i < steps; i++) {
-            midTotalMag[i] *= (mag[i] || 1);
-        }
-    });
-
-    graph.sideFilters.forEach(f => {
-        f.getFrequencyResponse(freqs, mag, phase);
-        for(let i = 0; i < steps; i++) {
-            sideTotalMag[i] *= (mag[i] || 1);
-        }
-    });
-
-    let sum = 0;
-    for(let i = 0; i < steps; i++) {
-        const avgMag = (midTotalMag[i] + sideTotalMag[i]) / 2;
-        const db = 20 * Math.log10(avgMag || 1);
-        sum += db;
-    }
-    const avgDb = sum / steps;
-    // ensure no NaNs
-    const safeAvgDb = isNaN(avgDb) ? 0 : avgDb;
-    const makeupGainLinear = Math.min(10, Math.max(0.1, Math.pow(10, -safeAvgDb / 20)));
-    console.log(`Makeup gain for ${isTarget ? 'target' : 'user'} filters: safeAvgDb=${safeAvgDb}, makeupGainLinear=${makeupGainLinear}`);
-
-    const makeUpNode = isTarget ? this.targetMakeupGain : this.userMakeupGain;
-    makeUpNode.gain.cancelScheduledValues(this.ctx.currentTime);
-    makeUpNode.gain.value = makeupGainLinear;
   }
 
   getIndividualFrequencyResponses(isTarget: boolean, width: number): { outDb: Float32Array, midDb: Float32Array, sideDb: Float32Array }[] {

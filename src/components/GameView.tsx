@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X } from 'lucide-react';
+import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X, Power } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, calculateMatchScore, cn } from '../lib/utils';
 import { LevelManager } from '../lib/LevelManager';
@@ -116,7 +116,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       setTrackCoverArt(tToPlay ? tToPlay.coverArt || '' : '');
 
       // 1. Generate Nodes
-      const tNodes = LevelManager.generateLevelTargets(level);
+      const { targets: tNodes } = LevelManager.generateLevelTargets(level);
       const uNodes = LevelManager.generateUserInitial(tNodes, level);
       
       setTargetNodes(tNodes);
@@ -194,11 +194,21 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
         e.preventDefault(); // Prevent accidental default operations
         handleModeChange(listenMode === 'target' ? 'user' : 'target');
       }
+
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        const isAllBypassed = userNodes.every(n => n.enabled === false);
+        const newNodes = userNodes.map(n => ({ ...n, enabled: isAllBypassed }));
+        if (engine) {
+          engine.setUserNodes(newNodes);
+        }
+        setUserNodes(newNodes);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [listenMode, engine]);
+  }, [listenMode, engine, userNodes]);
 
   const handleUserNodesChange = (nodes: EQNodeData[]) => {
     if (!engine) return;
@@ -330,8 +340,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       </header>
 
       {/* Main Game Area */}
-      <main className="flex-1 p-4 md:p-6 relative flex flex-col gap-4">
-          <div className="flex flex-col relative w-full items-center">
+      <main className="flex-1 min-h-0 p-4 md:p-6 relative flex flex-col gap-4">
+          <div className="flex flex-col relative w-full items-center shrink-0">
               <div className="w-full relative">
                   <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} trackName={trackName} trackArtist={trackArtist} trackCoverArt={trackCoverArt} />
               </div>
@@ -350,16 +360,17 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           )}
 
           {/* Canvas Wrapper */}
-          <div className="flex-1 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a] mt-2 flex flex-col">
+          <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a] mt-2 flex flex-col overflow-hidden">
             <div className="absolute top-4 left-4 z-10 text-xs text-slate-500 font-mono flex flex-col gap-1 pointer-events-none">
               <div>Drag: Frequency & Gain</div>
               <div>Alt + Drag: Q factor (Width)</div>
               <div>Double Click: Reset Gain to 0dB</div>
               <div>B: Bypass Selected Node</div>
+              <div>Z: Toggle Global Bypass</div>
               <div>S or L: Listen to Selected Node</div>
             </div>
             
-            <div className="flex-1 relative flex">
+            <div className="flex-1 min-h-0 relative flex">
                 <div className="flex-1 min-w-0">
                     <EQCanvas 
                         engine={engine}
@@ -370,15 +381,35 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         listenMode={listenMode}
                         onListenModeChange={handleModeChange}
                         showGainHint={config.showGainHint}
+                        gainRange={config.gainRange}
                     />
                 </div>
                 <LevelMeter engine={engine} isVisible={showMeter} className="w-12 border-l border-slate-800/60 bg-slate-900/40" />
             </div>
             
             {/* Band Controls */}
-            <div className="h-16 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto justify-between">
+            <div className="h-16 shrink-0 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest shrink-0">Bands:</span>
+                
+                <button
+                  onClick={() => {
+                      const isAllBypassed = userNodes.every(n => n.enabled === false);
+                      const newNodes = userNodes.map(n => ({ ...n, enabled: isAllBypassed }));
+                      handleUserNodesChange(newNodes);
+                  }}
+                  className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition shrink-0",
+                      userNodes.every(n => n.enabled === false)
+                          ? "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
+                          : "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20"
+                  )}
+                  title="Global Bypass (Z)"
+                >
+                  <Power className="w-4 h-4" />
+                  Global {userNodes.every(n => n.enabled === false) ? 'Bypassed' : 'ON'}
+                </button>
+
                 {userNodes.map((node, idx) => {
                   const isBypassed = node.enabled === false;
                   const activeColor = `rgba(${BAND_COLORS[idx % BAND_COLORS.length]}, 1)`;
@@ -455,7 +486,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                 </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono text-slate-300 mb-4 whitespace-nowrap">
-                <div>Nodes: <span className="text-emerald-400">{config.nodesCount}</span></div>
+                <div>Nodes: <span className="text-emerald-400">{config.nodeDistribution.stereo + config.nodeDistribution.mid + config.nodeDistribution.side}</span></div>
                 <div>Gain: <span className="text-amber-400">±{config.gainRange[0]}~{config.gainRange[1]}dB</span></div>
                 <div>Q Range: <span className="text-violet-400">{config.qRange[0]}~{config.qRange[1]}</span></div>
                 <div>Hint: <span className={config.showGainHint ? "text-emerald-400" : "text-rose-400"}>{config.showGainHint ? 'Y' : 'N'}</span> | Limit: <span className={config.constrainBounds ? "text-emerald-400" : "text-rose-400"}>{config.constrainBounds ? 'Y' : 'N'}</span></div>
@@ -465,6 +496,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                     <tr>
                        <th className="px-3 py-2 font-medium">Band</th>
                        <th className="px-3 py-2 font-medium">Type</th>
+                       <th className="px-3 py-2 font-medium">Mode</th>
                        <th className="px-3 py-2 font-medium">Freq (Hz)</th>
                        <th className="px-3 py-2 font-medium">Gain (dB)</th>
                        <th className="px-3 py-2 font-medium">Q-Factor</th>
@@ -475,6 +507,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                        <tr key={n.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                           <td className="px-3 py-2 text-slate-500">#{i + 1}</td>
                           <td className="px-3 py-2 text-indigo-300">{n.type}</td>
+                          <td className="px-3 py-2 text-sky-300">{n.stereoMode}</td>
                           <td className="px-3 py-2 text-amber-300">{n.freq.toFixed(0)}</td>
                           <td className="px-3 py-2 text-emerald-300">{(n.gain > 0 ? '+' : '')}{n.gain.toFixed(2)}</td>
                           <td className="px-3 py-2 text-violet-300">{n.q.toFixed(2)}</td>

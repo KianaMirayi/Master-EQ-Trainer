@@ -150,12 +150,15 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [trackName, setTrackName] = useState('');
-  const [isBypassed, setIsBypassed] = useState(false);
+  const [gainBypassToggle, setGainBypassToggle] = useState(false);
+
+  const isAllNodesBypassed = nodes.length > 0 && nodes.every(n => n.enabled === false);
+  const isCurrentlyBypassed = nodes.length > 0 ? isAllNodesBypassed : gainBypassToggle;
 
   const applyToEngine = (currentNodes: EQNodeData[], currentGain: number, bypass: boolean) => {
     if (!engine) return;
-    const engineNodes = bypass ? currentNodes.map(n => ({...n, enabled: false})) : currentNodes;
-    engine.setUserNodes(engineNodes);
+    // We already modified node enabled states if length > 0, so no need to map them again for engine
+    engine.setUserNodes(currentNodes); 
     engine.setCalibrationGain(bypass ? 0 : currentGain);
   }
 
@@ -163,19 +166,27 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
   const handleNodesChange = (newNodes: EQNodeData[]) => {
     setNodes(newNodes);
     onSave({ ...preset, nodes: newNodes, globalGain });
-    applyToEngine(newNodes, globalGain, isBypassed);
+    const isNewBypassed = newNodes.length > 0 ? newNodes.every(n => n.enabled === false) : gainBypassToggle;
+    applyToEngine(newNodes, globalGain, isNewBypassed);
   };
 
   const handleGlobalGainChange = (gain: number) => {
     setGlobalGain(gain);
     onSave({ ...preset, nodes, globalGain: gain });
-    applyToEngine(nodes, gain, isBypassed);
+    applyToEngine(nodes, gain, isCurrentlyBypassed);
   };
 
   const toggleBypass = () => {
-    const next = !isBypassed;
-    setIsBypassed(next);
-    applyToEngine(nodes, globalGain, next);
+    const nextBypass = !isCurrentlyBypassed;
+    if (nodes.length > 0) {
+      const newNodes = nodes.map(n => ({ ...n, enabled: !nextBypass }));
+      setNodes(newNodes);
+      onSave({ ...preset, nodes: newNodes, globalGain });
+      applyToEngine(newNodes, globalGain, nextBypass);
+    } else {
+      setGainBypassToggle(nextBypass);
+      applyToEngine(nodes, globalGain, nextBypass);
+    }
   };
 
   const handleGainStrChange = (val: string) => {
@@ -187,6 +198,22 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
       handleGlobalGainChange(parsed);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+      if (isInputFocused) return;
+      
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        toggleBypass();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleBypass]);
 
   const handleGainBlur = () => {
     if (gainStr === "" || gainStr === "-" || gainStr === "+") {
@@ -297,14 +324,14 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
             onClick={toggleBypass}
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors text-sm",
-              isBypassed 
+              isCurrentlyBypassed 
                 ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" 
                 : "bg-cyan-500/20 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/30"
             )}
-            title="Global Bypass"
+            title="Global Bypass (Z)"
           >
             <Power className="w-4 h-4" />
-            <span className="hidden sm:inline">{isBypassed ? "Bypassed" : "Bypass"}</span>
+            <span className="hidden sm:inline">{isCurrentlyBypassed ? "Bypassed" : "Bypass"}</span>
           </button>
 
           <div className="flex items-center gap-2 px-2 mr-2 bg-slate-950/30 py-1 px-3 rounded-lg border border-slate-800/50">
