@@ -31,7 +31,9 @@ interface EQCanvasProps {
   onListenModeChange?: (mode: 'user' | 'target') => void;
   showGainHint?: boolean;
   gainRange?: [number, number];
+  isScanning?: boolean;
 }
+
 
 // ==========================================
 // SPECTRUM COLOR SETTINGS
@@ -141,9 +143,18 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9] }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9], isScanning = false }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scanStartTimeRef = useRef<number>(0);
+  const isScanningRef = useRef<boolean>(isScanning);
+
+  useEffect(() => {
+    isScanningRef.current = isScanning;
+    if (isScanning) {
+      scanStartTimeRef.current = performance.now();
+    }
+  }, [isScanning]);
 
   const handleNodesChangeWrapper = (nodes: EQNodeData[]) => {
       if (listenMode === 'target') onListenModeChange?.('user');
@@ -465,6 +476,39 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
     let frameId: number;
     const draw = () => {
+      const now = performance.now();
+      const elapsedScan = scanStartTimeRef.current > 0 ? (now - scanStartTimeRef.current) : 0;
+      let scanPhase = -1;
+      let scanProgress = 1;
+      let dimLevel = 0;
+      let effectFade = 1.0;
+
+      if (isScanningRef.current || showTarget) {
+          if (elapsedScan < 500) {
+              scanPhase = 0; // intro dim
+              dimLevel = (elapsedScan / 500) * 0.7;
+              scanProgress = 0;
+          } else if (elapsedScan < 1300) {
+              scanPhase = 1; // sweep
+              dimLevel = 0.7;
+              scanProgress = Math.min(1, (elapsedScan - 500) / 800);
+          } else {
+              scanPhase = 2; // highlight overlap
+              dimLevel = 0.7;
+              scanProgress = 1;
+              
+              if (elapsedScan > 3000) {
+                  effectFade = Math.max(0, 1 - (elapsedScan - 3000) / 1000);
+                  dimLevel = effectFade * 0.7;
+              }
+              
+              // Only draw if effectFade > 0
+              if (effectFade <= 0) {
+                  scanPhase = -1;
+              }
+          }
+      }
+
       ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
       // --- Draw Grid ---
@@ -780,6 +824,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       engine.userAnalyser.getFloatFrequencyData(userFftData);
       drawSpectrum(userFftData, USER_SPECTRUM_FILL_COLOR, userEnvelopeRef, USER_SPECTRUM_STROKE_COLOR);
 
+      if (dimLevel > 0) {
+          ctx.fillStyle = `rgba(11, 12, 16, ${dimLevel})`;
+          ctx.fillRect(0, 0, dimensions.width, dimensions.height);
+      }
+
       // --- Draw EQ curves ---
       const drawCurve = (isTarget: boolean, color: string, dashes: number[] = []) => {
         const { mid: midResponse, side: sideResponse } = engine.getFrequencyResponse(isTarget, dimensions.width);
@@ -803,6 +852,13 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
         // --- LAYER 1: Global Curves ---
         ctx.save();
+        
+        if (isTarget && scanProgress < 1) {
+            ctx.beginPath();
+            ctx.rect(0, 0, dimensions.width * scanProgress, dimensions.height);
+            ctx.clip();
+        }
+
         ctx.setLineDash(dashes);
         
         if (isPureStereo) {
@@ -1014,6 +1070,54 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       }
       drawCurve(false, '#eab308'); // Main curve yellow
 
+      if (showTarget || scanPhase === 1 || scanPhase === 2) {
+          const { mid: tgtMid } = engine.getFrequencyResponse(true, dimensions.width);
+          const { mid: usrMid } = engine.getFrequencyResponse(false, dimensions.width);
+          
+          ctx.save();
+          const drawWidth = dimensions.width * scanProgress;
+          
+          for (let x = 0; x < drawWidth; x++) {
+              const diff = Math.abs(tgtMid[x] - usrMid[x]);
+              const tY = gainToY(tgtMid[x]) * dimensions.height;
+              const uY = gainToY(usrMid[x]) * dimensions.height;
+              
+              if (diff < 1.0) {
+                  ctx.strokeStyle = `rgba(250, 204, 21, ${(1 - diff) * 0.5 * effectFade})`;
+                  ctx.beginPath();
+                  ctx.moveTo(x, Math.min(tY, uY) - 5);
+                  ctx.lineTo(x, Math.max(tY, uY) + 5);
+                  ctx.stroke();
+              } else if (diff > 4.0) {
+                  const pulse = (Math.sin(now / 150 + x / 30) + 1) / 2;
+                  ctx.strokeStyle = `rgba(239, 68, 68, ${Math.min(0.4, (diff - 4) * 0.1) * pulse * effectFade})`;
+                  ctx.beginPath();
+                  ctx.moveTo(x, tY);
+                  ctx.lineTo(x, uY);
+                  ctx.stroke();
+              }
+          }
+          
+          if (scanPhase === 1) {
+              const scanX = dimensions.width * scanProgress;
+              const grad = ctx.createLinearGradient(scanX - 50, 0, scanX, 0);
+              grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+              grad.addColorStop(1, 'rgba(56, 189, 248, 0.4)');
+              
+              ctx.fillStyle = grad;
+              ctx.fillRect(scanX - 50, 0, 50, dimensions.height);
+              
+              ctx.strokeStyle = 'rgba(56, 189, 248, 1)';
+              ctx.lineWidth = 2;
+              ctx.shadowColor = 'rgba(56, 189, 248, 1)';
+              ctx.shadowBlur = 10;
+              ctx.beginPath();
+              ctx.moveTo(scanX, 0);
+              ctx.lineTo(scanX, dimensions.height);
+              ctx.stroke();
+          }
+          ctx.restore();
+      }
 
       frameId = requestAnimationFrame(draw);
     };
@@ -1025,6 +1129,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   // Handle Dragging
   const handlePointerDown = (e: React.PointerEvent, idx: number) => {
     e.stopPropagation();
+    if (isScanningRef.current) return;
     if (listenMode === 'target') onListenModeChange?.('user');
     setActiveNodeIdx(idx);
     setSelectedNodeIdx(idx);
@@ -1053,6 +1158,33 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 newNode.q = Math.max(0.1, Math.min(40, newNode.q - yDelta * 0.1));
                 newNodes[activeNodeIdx] = newNode;
             }
+        } else if (e.shiftKey) {
+            // Fine-tuning with movementX and movementY
+            const deltaX = e.movementX / rect.width;
+            const deltaY = e.movementY / rect.height;
+            const fineScale = 0.15; // 15% speed for precise adjustment
+            
+            const newNode = { ...newNodes[activeNodeIdx] };
+            const oldX = freqToX(newNode.freq);
+            const oldY = gainToY(newNode.gain || 0); // Handle highpass/lowpass lack of gain
+            
+            const nextX = Math.max(0, Math.min(1, oldX + deltaX * fineScale));
+            const nextY = Math.max(0, Math.min(1, oldY + deltaY * fineScale));
+            
+            let finalFreq = xToFreq(nextX);
+            if (newNode.minFreq !== undefined && newNode.maxFreq !== undefined) {
+                finalFreq = Math.max(newNode.minFreq, Math.min(newNode.maxFreq, finalFreq));
+            }
+            newNode.freq = finalFreq;
+            
+            if (newNode.type !== 'highpass' && newNode.type !== 'lowpass') {
+                let finalGain = yToGain(nextY);
+                if (newNode.minGain !== undefined && newNode.maxGain !== undefined) {
+                    finalGain = Math.max(newNode.minGain, Math.min(newNode.maxGain, finalGain));
+                }
+                newNode.gain = finalGain;
+            }
+            newNodes[activeNodeIdx] = newNode;
         } else {
             const newNode = { ...newNodes[activeNodeIdx] };
             let finalFreq = newFreq;
@@ -1254,7 +1386,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 onDoubleClick={() => handleDoubleClick(idx)}
                 onWheel={(e: any) => handleWheel(e, idx)}
                 className={cn(
-                    "w-4 h-4 rounded-full border-2 cursor-grab transition-all",
+                    "w-4 h-4 rounded-full border-2 cursor-grab transition-all relative before:absolute before:-inset-4 before:content-[''] before:rounded-full",
                     (isActive || isSelected) || listeningNodeIdx === idx ? "border-white scale-125 z-20" : "border-slate-300",
                     listeningNodeIdx !== null && listeningNodeIdx !== idx && "opacity-20 saturate-0 scale-90"
                 )}
@@ -1516,7 +1648,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       })}
 
       {/* Target Nodes Overlay (for review stage) */}
-      {showTarget && targetNodes && targetNodes.map((node, idx) => {
+      {!isScanning && showTarget && targetNodes && targetNodes.map((node, idx) => {
         const xPos = freqToX(node.freq) * dimensions.width;
         const yPos = gainToY(node.gain) * dimensions.height;
         

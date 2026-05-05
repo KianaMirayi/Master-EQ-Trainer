@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
 import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { EQNodeData, cn } from './lib/utils';
@@ -232,48 +233,66 @@ export default function App() {
     </>
   );
 
-  if (currentView === 'game') {
-    return (
-      <>
-        <GameView 
-          level={activeLevel} 
-          selectedTrackId={selectedTrackId} 
-          onLevelComplete={handleLevelComplete} 
-          onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
-          onBack={() => {
-             setIsTestMode(false);
-             setCurrentView('dashboard');
-          }}
-          onLevelChange={isTestMode ? (lvl) => setActiveLevel(lvl) : undefined}
-        />
-        {renderModals()}
-      </>
-    );
-  }
-
-  if (currentView === 'calibration') {
-    return (
-      <>
-        <CalibrationSettings onBack={() => setCurrentView('dashboard')} />
-        {renderModals()}
-      </>
-    );
-  }
-
   // Dashboard View
   const levelsParams = Array.from({ length: 100 }, (_, i) => i + 1);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 bg-grid-pattern">
-      <input 
-        type="file" 
-        multiple
-        accept="audio/mp3, audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/flac, audio/x-m4a, audio/webm" 
-        ref={fileInputRef} 
-        onChange={handleAudioUpload} 
-        className="hidden" 
-      />
-      <div className="max-w-6xl mx-auto p-6 md:p-12">
+    <div className="relative w-screen h-screen overflow-hidden bg-slate-950 flex flex-col">
+      <AnimatePresence mode="wait">
+        {currentView === 'game' && (
+          <motion.div
+            key={`game-${activeLevel}`}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.02 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="absolute inset-0 z-20"
+          >
+            <GameView 
+              level={activeLevel} 
+              selectedTrackId={selectedTrackId} 
+              onLevelComplete={handleLevelComplete} 
+              onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
+              onBack={() => {
+                 setIsTestMode(false);
+                 setCurrentView('dashboard');
+              }}
+              onLevelChange={isTestMode ? (lvl) => setActiveLevel(lvl) : undefined}
+            />
+          </motion.div>
+        )}
+
+        {currentView === 'calibration' && (
+          <motion.div
+            key="calibration"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="absolute inset-0 z-20 overflow-y-auto bg-slate-950"
+          >
+            <CalibrationSettings onBack={() => setCurrentView('dashboard')} />
+          </motion.div>
+        )}
+
+        {currentView === 'dashboard' && (
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="absolute inset-0 z-10 bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 bg-grid-pattern overflow-x-hidden overflow-y-auto"
+          >
+            <input 
+              type="file" 
+              multiple
+              accept="audio/mp3, audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/flac, audio/x-m4a, audio/webm" 
+              ref={fileInputRef} 
+              onChange={handleAudioUpload} 
+              className="hidden" 
+            />
+            <div className="max-w-6xl mx-auto p-6 md:p-12">
         <header className="flex flex-col md:flex-row items-start md:items-center justify-between mb-12 gap-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -638,6 +657,10 @@ export default function App() {
           </div>
         </div>
       </div>
+      </motion.div>
+    )}
+    </AnimatePresence>
+    {renderModals()}
     </div>
   );
 }

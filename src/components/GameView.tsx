@@ -62,9 +62,12 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [userNodes, setUserNodes] = useState<EQNodeData[]>([]);
   const [listenMode, setListenMode] = useState<'target' | 'user'>('user');
   const [isSettled, setIsSettled] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [showScoreDetails, setShowScoreDetails] = useState(false);
   const [showFeedbackMessage, setShowFeedbackMessage] = useState(false);
   const [scoreReport, setScoreReport] = useState<LevelScoreReport | null>(null);
+  const [displayScore, setDisplayScore] = useState(0);
+  const [displayStars, setDisplayStars] = useState(0);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [trackName, setTrackName] = useState<string>('');
@@ -214,11 +217,30 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
         }
         setUserNodes(newNodes);
       }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isSettled) {
+          handleSubmit();
+        }
+      }
+
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        if (isSettled && scoreReport && scoreReport.stars >= 1) {
+          handleNext();
+        }
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onBack();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [listenMode, engine, userNodes]);
+  }, [listenMode, engine, userNodes, isSettled, scoreReport, onBack, targetNodes, level]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -228,6 +250,44 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     return () => clearTimeout(timer);
   }, [showFeedbackMessage]);
 
+  useEffect(() => {
+    if (isSettled && scoreReport) {
+      const duration = 1500;
+      const startTime = performance.now();
+      setDisplayScore(0);
+      setDisplayStars(0);
+      let rafId: number;
+
+      const animate = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+
+        setDisplayScore(Math.round(scoreReport.totalScore * easeOutQuart));
+
+        // Light up stars sequentially
+        if (scoreReport.stars > 0) {
+           const timePerStar = duration / 4; // 1/4 of total time per star approx
+           const expectedStars = Math.min(scoreReport.stars, Math.floor(elapsed / timePerStar));
+           setDisplayStars(expectedStars);
+        }
+
+        if (progress < 1) {
+          rafId = requestAnimationFrame(animate);
+        } else {
+          setDisplayScore(scoreReport.totalScore);
+          setDisplayStars(scoreReport.stars);
+        }
+      };
+      rafId = requestAnimationFrame(animate);
+
+      return () => cancelAnimationFrame(rafId);
+    } else {
+      setDisplayScore(0);
+      setDisplayStars(0);
+    }
+  }, [isSettled, scoreReport]);
+
   const handleUserNodesChange = (nodes: EQNodeData[]) => {
     if (!engine) return;
     setUserNodes(nodes);
@@ -235,14 +295,20 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   };
 
   const handleSubmit = () => {
-    if (!engine) return;
-    const report = calculateLevelScore(targetNodes, userNodes, level);
-    setScoreReport(report);
-    setIsSettled(true);
-    setShowScoreDetails(true);
-    setShowFeedbackMessage(true);
-    // Switch to user mode upon settlement to let them tweak and compare
-    handleModeChange('user');
+    if (!engine || isScanning) return;
+    setIsScanning(true);
+    setScoreReport(null);
+    setIsSettled(false);
+
+    // Give visual animation time to complete before showing score details
+    setTimeout(() => {
+      setIsScanning(false);
+      const report = calculateLevelScore(targetNodes, userNodes, level);
+      setScoreReport(report);
+      setIsSettled(true);
+      setShowFeedbackMessage(true);
+      handleModeChange('user');
+    }, 1400);
   };
 
   const handleNext = () => {
@@ -257,14 +323,14 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   };
 
   if (!engine) {
-     return <div className="h-screen w-screen bg-slate-950"></div>;
+     return <div className="h-full w-full bg-slate-950"></div>;
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-50 font-sans">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-slate-950 text-slate-50 font-sans">
       {/* Top Bar */}
       <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 relative z-50">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-1">
           <button onClick={onBack} className="text-slate-400 hover:text-white transition">
             ← Back
           </button>
@@ -305,7 +371,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex-none flex items-center justify-center gap-3">
           <div className="h-8 bg-slate-800 p-1 rounded-md flex items-center gap-1 min-w-[200px]">
             <button
               onClick={() => handleModeChange('target')}
@@ -353,12 +419,17 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                 </button>
                 
                 {/* Detailed Score Report */}
-                {showScoreDetails && (
-                  <motion.div 
-                    drag
-                    dragMomentum={false}
-                    className="absolute top-full mt-4 right-0 z-50 w-[300px] max-w-[calc(100vw-2rem)] bg-slate-900/95 border border-slate-700/60 rounded-xl p-4 backdrop-blur-md shadow-2xl overflow-y-auto max-h-[50vh] pointer-events-auto cursor-move"
-                  >
+                <AnimatePresence>
+                  {showScoreDetails && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      drag
+                      dragMomentum={false}
+                      className="absolute top-full mt-4 right-0 z-50 w-[300px] max-w-[calc(100vw-2rem)] bg-slate-900/95 border border-slate-700/60 rounded-xl p-4 backdrop-blur-md shadow-2xl overflow-y-auto max-h-[50vh] pointer-events-auto cursor-default [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                    >
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                         <Activity className="w-4 h-4 text-cyan-400" />
@@ -401,11 +472,12 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                           <span className={cn(
                             "text-lg",
                             scoreReport!.stars >= 1 ? "text-emerald-400" : "text-amber-400"
-                          )}>{scoreReport!.totalScore}</span>
+                          )}>{displayScore}</span>
                       </div>
                     </div>
                   </motion.div>
-                )}
+                  )}
+                </AnimatePresence>
               </div>
 
               <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-md">
@@ -413,12 +485,20 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                 <span className={cn(
                   "font-mono font-bold text-lg",
                   scoreReport!.stars >= 1 ? "text-emerald-400" : "text-red-400"
-                )}>{scoreReport!.totalScore}</span>
+                )}>{displayScore}</span>
                 <div className="flex">
                   {[1, 2, 3].map(i => (
-                    <svg key={i} className={cn("w-4 h-4", i <= scoreReport!.stars ? "text-amber-400" : "text-slate-600")} fill="currentColor" viewBox="0 0 20 20">
+                    <motion.svg 
+                      key={i} 
+                      className={cn("w-4 h-4", i <= displayStars ? "text-amber-400" : "text-slate-600")} 
+                      fill="currentColor" 
+                      viewBox="0 0 20 20"
+                      initial={{ scale: 0.8 }}
+                      animate={{ scale: i <= displayStars ? 1.2 : 1 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                    >
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                    </svg>
+                    </motion.svg>
                   ))}
                 </div>
               </div>
@@ -479,7 +559,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         userNodes={userNodes}
                         targetNodes={targetNodes}
                         onNodesChange={handleUserNodesChange}
-                        showTarget={isSettled}
+                        showTarget={isSettled || isScanning}
+                        isScanning={isScanning}
                         listenMode={listenMode}
                         onListenModeChange={handleModeChange}
                         showGainHint={config.showGainHint}
