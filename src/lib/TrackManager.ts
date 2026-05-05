@@ -18,6 +18,7 @@ export const BUILT_IN_TRACKS: Track[] = [
     { id: 'builtin-4', name: 'Hope Is the Thing With Feathers', artist: 'HOYO-MiX', url: '/Hope Is the Thing With Feathers.mp3', isCustom: false },
     { id: 'builtin-5', name: 'Sway to My Beat in Cosmos', artist: 'HOYO-MiX', url: '/Sway to My Beat in Cosmos.mp3', isCustom: false },
     { id: 'builtin-6', name: 'prettyjohn1', artist: 'prettyjohn1', url: '/prettyjohn1.mp3', isCustom: false },
+    { id: 'builtin-7', name: '昔涟', artist: 'HOYO-MiX/张韶涵', url: '/昔涟.mp3', isCustom: false },
 ];
 
 const STORE_KEY = 'custom-tracks-v2';
@@ -28,6 +29,37 @@ export class TrackManager {
 
     static async init(): Promise<void> {
         if (this.isLoaded) return;
+        try {
+            const builtInPromises = BUILT_IN_TRACKS.map(t => new Promise<void>((resolve) => {
+                if (!t.url) return resolve();
+                const absoluteUrl = new URL(t.url, window.location.origin).href;
+                jsmediatags.read(absoluteUrl, {
+                    onSuccess: function(tag) {
+                        let coverArt: string | undefined;
+                        const picture = tag.tags.picture;
+                        if (picture) {
+                            let base64String = "";
+                            for (let i = 0; i < picture.data.length; i++) {
+                                base64String += String.fromCharCode(picture.data[i]);
+                            }
+                            coverArt = `data:${picture.format};base64,${window.btoa(base64String)}`;
+                        }
+                        if (tag.tags.title) t.name = tag.tags.title;
+                        if (tag.tags.artist) t.artist = tag.tags.artist;
+                        if (coverArt) t.coverArt = coverArt;
+                        resolve();
+                    },
+                    onError: function(error) {
+                        console.log('Error reading tags for built-in track:', t.name, error);
+                        resolve();
+                    }
+                });
+            }));
+            await Promise.all(builtInPromises);
+        } catch (e) {
+            console.error("Failed to load metadata for built-in tracks", e);
+        }
+
         try {
             const storedV2 = await get(STORE_KEY);
             if (storedV2 && Array.isArray(storedV2)) {

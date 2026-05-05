@@ -456,9 +456,13 @@ export default function App() {
                         onClick={() => setSelectedTrackId(t.id)} 
                         className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer text-left", selectedTrackId === t.id ? "bg-cyan-500/20 font-medium" : "hover:bg-slate-800 text-slate-300")}
                       >
-                        <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
-                           <Music className="w-5 h-5" />
-                        </div>
+                        {t.coverArt ? (
+                           <img src={t.coverArt} alt="Cover" className={cn("w-10 h-10 rounded shrink-0 object-cover", selectedTrackId === t.id ? "ring-2 ring-cyan-500/50" : "")} />
+                        ) : (
+                           <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
+                              <Music className="w-5 h-5" />
+                           </div>
+                        )}
                         <div className="flex flex-col min-w-0 pr-2">
                            <div className={cn("truncate text-sm", selectedTrackId === t.id ? "text-cyan-400" : "")}>{t.name}</div>
                            {t.artist && <div className={cn("text-xs truncate", selectedTrackId === t.id ? "text-cyan-500/80" : "text-slate-500")}>{t.artist}</div>}
