@@ -24,6 +24,9 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
 
+  const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
+  const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
+
   // Load from local storage and initialize indexedDB
   useEffect(() => {
     TrackManager.init().then(() => {
@@ -137,6 +140,16 @@ export default function App() {
   const handleLevelComplete = (score: number, stars: number) => {
     saveScore(activeLevel, score, stars);
     
+    if (activeLevel === 100) {
+      setShowPeakCongratulation(true);
+      return;
+    }
+
+    if (ProgressionManager.isBossLevel(activeLevel) && !isTestMode) {
+      setShowBossCongratulation(activeLevel);
+      return;
+    }
+
     const nextLevel = activeLevel + 1;
     if (ProgressionManager.checkEnterLevel(nextLevel).allowed) {
       setActiveLevel(nextLevel);
@@ -145,31 +158,113 @@ export default function App() {
     }
   };
 
+  const renderModals = () => (
+    <>
+      {showPeakCongratulation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.2)] animate-in fade-in zoom-in duration-300">
+            <Trophy className="w-16 h-16 text-amber-400 mx-auto mb-4 drop-shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
+            <h2 className="text-3xl font-black text-amber-400 tracking-tight mb-2 uppercase">
+              You're THE PEAK !!!
+            </h2>
+            <p className="text-slate-300 mb-6 leading-relaxed">
+              You have the Golden Ear now
+            </p>
+            <div className="mb-8 flex justify-center w-full min-h-[120px]">
+               <img src="/bosses/PassTheLevel.jpeg" alt="Peak Reached" className="max-w-full h-auto rounded-lg shadow-lg object-contain max-h-48" onError={(e) => {
+                 (e.target as HTMLImageElement).style.display = 'none';
+               }} />
+            </div>
+            <button
+              onClick={() => {
+                setShowPeakCongratulation(false);
+                setCurrentView('dashboard');
+              }}
+              className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)] hover:shadow-[0_0_25px_rgba(245,158,11,0.6)] w-full active:scale-95"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showBossCongratulation !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(34,211,238,0.2)] animate-in fade-in zoom-in duration-300 flex flex-col items-center">
+            <Trophy className="w-16 h-16 text-cyan-400 mx-auto mb-4 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
+            <h2 className="text-3xl font-black text-cyan-400 tracking-tight mb-2 uppercase">
+              Boss Defeated!
+            </h2>
+            <p className="text-slate-300 mb-6 leading-relaxed">
+              You have conquered Level {showBossCongratulation}!
+            </p>
+            <div className="mb-8 flex justify-center w-full min-h-[120px]">
+               <img src="/bosses/PassTheLevel.jpeg" alt={`Boss ${showBossCongratulation}`} className="max-w-full h-auto rounded-lg shadow-lg object-contain max-h-48" onError={(e) => {
+                 (e.target as HTMLImageElement).style.display = 'none';
+               }} />
+            </div>
+            <button
+              onClick={() => {
+                const blvl = showBossCongratulation;
+                setShowBossCongratulation(null);
+                const nextLevel = blvl + 1;
+                if (ProgressionManager.checkEnterLevel(nextLevel).allowed) {
+                  setActiveLevel(nextLevel);
+                  setCurrentView('game');
+                }
+              }}
+              className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-cyan-950 font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(34,211,238,0.4)] hover:shadow-[0_0_25px_rgba(34,211,238,0.6)] w-full active:scale-95 mb-3"
+            >
+              Continue to Next Level
+            </button>
+            <button
+              onClick={() => {
+                 setShowBossCongratulation(null);
+                 setCurrentView('dashboard');
+              }}
+              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-all w-full active:scale-95"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   if (currentView === 'game') {
     return (
-      <GameView 
-        level={activeLevel} 
-        selectedTrackId={selectedTrackId} 
-        onLevelComplete={handleLevelComplete} 
-        onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
-        onBack={() => {
-           setIsTestMode(false);
-           setCurrentView('dashboard');
-        }}
-        onLevelChange={isTestMode ? (lvl) => setActiveLevel(lvl) : undefined}
-      />
+      <>
+        <GameView 
+          level={activeLevel} 
+          selectedTrackId={selectedTrackId} 
+          onLevelComplete={handleLevelComplete} 
+          onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
+          onBack={() => {
+             setIsTestMode(false);
+             setCurrentView('dashboard');
+          }}
+          onLevelChange={isTestMode ? (lvl) => setActiveLevel(lvl) : undefined}
+        />
+        {renderModals()}
+      </>
     );
   }
 
   if (currentView === 'calibration') {
-    return <CalibrationSettings onBack={() => setCurrentView('dashboard')} />;
+    return (
+      <>
+        <CalibrationSettings onBack={() => setCurrentView('dashboard')} />
+        {renderModals()}
+      </>
+    );
   }
 
   // Dashboard View
-  const levelsParams = Array.from({ length: 20 }, (_, i) => i + 1);
+  const levelsParams = Array.from({ length: 100 }, (_, i) => i + 1);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 bg-grid-pattern">
       <input 
         type="file" 
         multiple
@@ -222,29 +317,32 @@ export default function App() {
                 Journey
               </h2>
               
-              <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-1.5 rounded-lg">
-                <span className="text-sm text-slate-400 pl-2">Test Environment:</span>
-                <select 
-                  className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-2 py-1 outline-none focus:border-cyan-500"
-                  onChange={(e) => {
-                     const lvl = parseInt(e.target.value);
-                     if (!isNaN(lvl)) {
-                        handleLevelSelect(lvl, true);
-                     }
-                  }}
-                  defaultValue=""
-                >
-                  <option value="" disabled>Select Core Level (1-100)...</option>
-                  {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
-                     <option key={l} value={l}>Level {l}</option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-1.5 rounded-lg">
+                  <span className="text-sm text-slate-400 pl-2">Test Environment:</span>
+                  <select 
+                    className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-2 py-1 outline-none focus:border-cyan-500"
+                    onChange={(e) => {
+                       const lvl = parseInt(e.target.value);
+                       if (!isNaN(lvl)) {
+                          handleLevelSelect(lvl, true);
+                       }
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select Core Level (1-100)...</option>
+                    {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
+                       <option key={l} value={l}>Level {l}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4">
-            {levelsParams.map(level => {
-              const check = ProgressionManager.checkEnterLevel(level);
+          <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4 py-3 px-2">
+              {levelsParams.map(level => {
+                const check = ProgressionManager.checkEnterLevel(level);
               const isUnlocked = check.allowed;
               const record = records[level];
               const isPassed = record?.passed;
@@ -297,6 +395,7 @@ export default function App() {
                 </button>
               );
             })}
+            </div>
           </div>
         </section>
 

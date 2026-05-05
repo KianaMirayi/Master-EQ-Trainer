@@ -1,11 +1,11 @@
 {
   "passScores": {
     "normal_1_to_39": 60,
-    "normal_41_to_69": 55,
-    "normal_71_to_99": 50,
+    "normal_41_to_69": 65,
+    "normal_71_to_99": 60,
     "boss_10_to_30": 70,
     "boss_40_to_70": 60,
-    "boss_80_to_100": 50
+    "boss_80_to_100": 65
   },
   "starGates": {
     "boss_10_to_70_req": 14,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X, Power } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, cn } from '../lib/utils';
 import { calculateLevelScore, LevelScoreReport } from '../lib/ScoreCalculator';
@@ -21,8 +22,7 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
         if (track.file) {
             arrayBuffer = await track.file.arrayBuffer();
         } else if (track.url) {
-            const url = encodeURI(track.url);
-            const res = await fetch(url);
+            const res = await fetch(track.url);
             if (!res.ok) throw new Error(`Failed to fetch ${track.url}: ${res.statusText} (${res.status})`);
             
             // Check if Vercel or another host returned an HTML page (like SPA fallback) instead of an audio file
@@ -62,6 +62,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [userNodes, setUserNodes] = useState<EQNodeData[]>([]);
   const [listenMode, setListenMode] = useState<'target' | 'user'>('user');
   const [isSettled, setIsSettled] = useState(false);
+  const [showScoreDetails, setShowScoreDetails] = useState(false);
+  const [showFeedbackMessage, setShowFeedbackMessage] = useState(false);
   const [scoreReport, setScoreReport] = useState<LevelScoreReport | null>(null);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
@@ -218,6 +220,14 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [listenMode, engine, userNodes]);
 
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showFeedbackMessage) {
+      timer = setTimeout(() => setShowFeedbackMessage(false), 4000);
+    }
+    return () => clearTimeout(timer);
+  }, [showFeedbackMessage]);
+
   const handleUserNodesChange = (nodes: EQNodeData[]) => {
     if (!engine) return;
     setUserNodes(nodes);
@@ -229,6 +239,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     const report = calculateLevelScore(targetNodes, userNodes, level);
     setScoreReport(report);
     setIsSettled(true);
+    setShowScoreDetails(true);
+    setShowFeedbackMessage(true);
     // Switch to user mode upon settlement to let them tweak and compare
     handleModeChange('user');
   };
@@ -251,7 +263,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-50 font-sans">
       {/* Top Bar */}
-      <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50">
+      <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 relative z-50">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="text-slate-400 hover:text-white transition">
             ← Back
@@ -318,7 +330,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           </div>
         </div>
 
-        <div className="flex items-center">
+        <div className="flex flex-1 justify-end items-center">
           {!isSettled ? (
             <button 
               onClick={handleSubmit}
@@ -328,6 +340,74 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
             </button>
           ) : (
             <div className="flex items-center gap-4">
+              <div className="relative">
+                <button
+                  onClick={() => setShowScoreDetails(!showScoreDetails)}
+                  className={cn(
+                    "bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-md shadow-lg transition flex items-center gap-2 border",
+                    showScoreDetails ? "border-cyan-500/50" : "border-slate-700/60"
+                  )}
+                >
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm">Score Report</span>
+                </button>
+                
+                {/* Detailed Score Report */}
+                {showScoreDetails && (
+                  <motion.div 
+                    drag
+                    dragMomentum={false}
+                    className="absolute top-full mt-4 right-0 z-50 w-[300px] max-w-[calc(100vw-2rem)] bg-slate-900/95 border border-slate-700/60 rounded-xl p-4 backdrop-blur-md shadow-2xl overflow-y-auto max-h-[50vh] pointer-events-auto cursor-move"
+                  >
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-cyan-400" />
+                        Score Report
+                      </h3>
+                      <button 
+                        onClick={() => setShowScoreDetails(false)}
+                        className="text-slate-400 hover:text-slate-200 transition-colors p-1 cursor-pointer"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3 pointer-events-none">
+                      {scoreReport!.nodeReports.map((r, i) => (
+                          <div key={i} className="bg-slate-800/50 rounded-lg p-3 text-xs border border-slate-800">
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="font-mono text-cyan-400 font-semibold">{Math.round(r.targetNode.freq)}Hz Target</span>
+                                <span className={cn("font-bold px-1.5 py-0.5 rounded", r.isVetoed ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400")}>
+                                  {r.isVetoed ? '0 pts (VETO)' : `${Math.round(r.baseScore)} pts`}
+                                </span>
+                              </div>
+                              {r.isVetoed ? (
+                                <div className="text-red-400/80 mb-1">{r.vetoReason}</div>
+                              ) : (
+                                <div className="text-slate-400 grid grid-cols-3 gap-1 mb-1 font-mono text-[10px]">
+                                  <div>Sf: {Math.round(r.Sf)}</div>
+                                  <div>Sg: {Math.round(r.Sg)}</div>
+                                  <div>Sq: {Math.round(r.Sq)}</div>
+                                </div>
+                              )}
+                              <div className="text-slate-500 mt-1.5 flex justify-between items-center pt-1.5 border-t border-slate-800/60">
+                                <span>Weight: x{r.weight}</span>
+                                {r.userNode && <span>User: {Math.round(r.userNode.freq)}Hz</span>}
+                              </div>
+                          </div>
+                      ))}
+                      <div className="pt-3 border-t border-slate-700 font-bold flex justify-between items-center text-sm">
+                          <span className="text-slate-300">Weighted Total</span>
+                          <span className={cn(
+                            "text-lg",
+                            scoreReport!.stars >= 1 ? "text-emerald-400" : "text-amber-400"
+                          )}>{scoreReport!.totalScore}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-md">
                 <span className="text-slate-400 text-sm">Match:</span>
                 <span className={cn(
@@ -363,58 +443,23 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           </div>
           
           {/* Settled Feedback Overlay */}
-          {isSettled && (
-            <>
-              <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-                  <div className="bg-slate-900/80 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
+          <AnimatePresence>
+            {isSettled && showFeedbackMessage && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute -top-6 md:-top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+              >
+                  <div className="bg-slate-900/90 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
                     {scoreReport!.stars >= 1 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <RotateCcw className="w-5 h-5 text-rose-400" />}
                     <span className="font-medium text-slate-200">
                         {scoreReport!.stars >= 1 ? "Good job! Review the curves below." : "Not quite. Check the difference."}
                     </span>
                   </div>
-              </div>
-
-              {/* Detailed Score Report */}
-              <div className="absolute top-24 right-4 z-20 w-[300px] max-w-[calc(100vw-2rem)] bg-slate-900/90 border border-slate-700/60 rounded-xl p-4 backdrop-blur-md shadow-2xl overflow-y-auto max-h-[50vh] pointer-events-auto">
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-cyan-400" />
-                  Score Report
-                </h3>
-                <div className="space-y-3">
-                  {scoreReport!.nodeReports.map((r, i) => (
-                      <div key={i} className="bg-slate-800/50 rounded-lg p-3 text-xs border border-slate-800">
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="font-mono text-cyan-400 font-semibold">{Math.round(r.targetNode.freq)}Hz Target</span>
-                            <span className={cn("font-bold px-1.5 py-0.5 rounded", r.isVetoed ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400")}>
-                              {r.isVetoed ? '0 pts (VETO)' : `${Math.round(r.baseScore)} pts`}
-                            </span>
-                          </div>
-                          {r.isVetoed ? (
-                            <div className="text-red-400/80 mb-1">{r.vetoReason}</div>
-                          ) : (
-                            <div className="text-slate-400 grid grid-cols-3 gap-1 mb-1 font-mono text-[10px]">
-                              <div>Sf: {Math.round(r.Sf)}</div>
-                              <div>Sg: {Math.round(r.Sg)}</div>
-                              <div>Sq: {Math.round(r.Sq)}</div>
-                            </div>
-                          )}
-                          <div className="text-slate-500 mt-1.5 flex justify-between items-center pt-1.5 border-t border-slate-800/60">
-                            <span>Weight: x{r.weight}</span>
-                            {r.userNode && <span>User: {Math.round(r.userNode.freq)}Hz</span>}
-                          </div>
-                      </div>
-                  ))}
-                  <div className="pt-3 border-t border-slate-700 font-bold flex justify-between items-center text-sm">
-                      <span className="text-slate-300">Weighted Total</span>
-                      <span className={cn(
-                        "text-lg",
-                        scoreReport!.stars >= 1 ? "text-emerald-400" : "text-amber-400"
-                      )}>{scoreReport!.totalScore}</span>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Canvas Wrapper */}
           <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a] mt-2 flex flex-col overflow-hidden">

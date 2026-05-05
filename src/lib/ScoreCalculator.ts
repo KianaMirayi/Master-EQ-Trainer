@@ -75,6 +75,13 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
         // One is positive, one is negative
         isVetoed = true;
         vetoReason = 'Opposite Gain Direction';
+    } else if (
+        userMatched.initialFreq !== undefined && 
+        userMatched.freq === userMatched.initialFreq && 
+        (userMatched.gain === 0 || userMatched.q === 1.0)
+    ) {
+        isVetoed = true;
+        vetoReason = 'Unoperated Node';
     }
     
     if (isVetoed) {

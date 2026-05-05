@@ -1,0 +1,1 @@
+This folder is intended for storing texture and material images (e.g., brushed metal, wood, etc.) for the UI. You can upload your image files here and reference them in your code as `/textures/your-image-name.jpg`.

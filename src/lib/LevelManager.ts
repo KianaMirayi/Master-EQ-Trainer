@@ -14,6 +14,11 @@ export interface LevelConfig {
   qRange: [number, number];
   showGainHint: boolean;
   constrainBounds: boolean;
+  cbOverride?: {
+    gainRange: [number, number];
+    peakingQRange: [number, number];
+    maxCutFreq: number;
+  };
 }
 
 // Map logical sub-pools to their frequency ranges [min, max]
@@ -52,7 +57,7 @@ export class LevelManager {
         side = 1 - mid;
     }
     
-    return {
+        return {
         nodeDistribution: {
             stereo: configData.nodeDistribution.stereo,
             mid,
@@ -64,7 +69,8 @@ export class LevelManager {
         gainRange: configData.gainRange as [number, number],
         qRange: configData.qRange as [number, number],
         showGainHint: configData.showGainHint,
-        constrainBounds: configData.constrainBounds
+        constrainBounds: configData.constrainBounds,
+        cbOverride: (configData as any).cbOverride
     };
   }
 
@@ -84,11 +90,26 @@ export class LevelManager {
 
     let tIdx = 0;
     for (const stereoMode of modesToGenerate) {
+        // Determine filter type based on weights BEFORE generating frequency
+        let typeCategory = 'bell';
+        const randType = Math.random();
+        let cumulative = 0;
+        for (const [t, w] of Object.entries(config.filterWeights)) {
+            cumulative += w;
+            if (randType <= cumulative) {
+                typeCategory = t;
+                break;
+            }
+        }
+
         // Find a valid frequency that is at least 1 octave apart from existing nodes
         let freq = 1000;
         let pName = availablePools[0];
         let foundValid = false;
         let attempts = 0;
+        
+        // Determine sign of the gain early to use it in frequency bounds
+        const sign = Math.random() > 0.5 ? 1 : -1;
 
         while (!foundValid && attempts < 50) {
             attempts++;
@@ -98,14 +119,28 @@ export class LevelManager {
                 // Rule 2 for Mid: Force from 100-500Hz
                 minF = 100;
                 maxF = 500;
+                pName = 'Mid';
             } else if (stereoMode === 'Side') {
                 // Rule 2 for Side: Force from 6k-16kHz
                 minF = 6000;
-                maxF = 16000;
+                if (typeCategory === 'shelf') {
+                    maxF = 12000;
+                } else {
+                    maxF = 10000;
+                }
+                pName = 'Side';
             } else {
                 // pick a random pool
                 pName = availablePools[Math.floor(Math.random() * availablePools.length)];
                 [minF, maxF] = SUB_POOLS[pName] || [200, 500];
+                
+                if (pName === 'CB') {
+                    if (typeCategory === 'shelf') {
+                        maxF = 12000;
+                    } else { // bell/peaking
+                        maxF = 10000;
+                    }
+                }
             }
 
             // random frequency in log scale within the pool
@@ -127,22 +162,16 @@ export class LevelManager {
             }
         }
 
-        // Determine filter type based on weights
         let type: BiquadFilterType = 'peaking';
-        const randType = Math.random();
-        let cumulative = 0;
-        for (const [t, w] of Object.entries(config.filterWeights)) {
-            cumulative += w;
-            if (randType <= cumulative) {
-                type = t === 'bell' ? 'peaking' : (t === 'shelf' ? (freq > 2000 ? 'highshelf' : 'lowshelf') : t as BiquadFilterType);
-                break;
-            }
+        if (typeCategory === 'shelf') {
+            type = freq > 2000 ? 'highshelf' : 'lowshelf';
+        } else if (typeCategory !== 'bell') {
+            type = typeCategory as BiquadFilterType;
         }
 
         // Determine gain
-        const sign = Math.random() > 0.5 ? 1 : -1;
-        const gainMagnitude = config.gainRange[0] + Math.random() * (config.gainRange[1] - config.gainRange[0]);
-        const gain = sign * gainMagnitude;
+        let gainMagnitude = config.gainRange[0] + Math.random() * (config.gainRange[1] - config.gainRange[0]);
+        let gain = sign * gainMagnitude;
 
         // Rule 1: M/S Q Range override
         let q = 1.0;
@@ -151,6 +180,20 @@ export class LevelManager {
         } else {
             q = config.qRange[0] + Math.random() * (config.qRange[1] - config.qRange[0]);
         }
+        
+        // Rule for CB/Side pool override for Gain and Q constraints
+        if (pName === 'CB' || pName === 'Side') {
+            const cbGainRange = config.cbOverride ? config.cbOverride.gainRange : [3, 6];
+            gainMagnitude = cbGainRange[0] + Math.random() * (cbGainRange[1] - cbGainRange[0]);
+            gain = sign * gainMagnitude;
+            
+            if (type === 'peaking') {
+                const cbQRange = config.cbOverride ? config.cbOverride.peakingQRange : [1, 2];
+                q = cbQRange[0] + Math.random() * (cbQRange[1] - cbQRange[0]);
+            } else if (type === 'highshelf' || type === 'lowshelf') {
+                q = 1.0;
+            }
+        }
 
         nodes.push({
             id: `target_lvl${level}_b${tIdx}`,
@@ -158,7 +201,8 @@ export class LevelManager {
             freq,
             gain,
             q,
-            stereoMode
+            stereoMode,
+            pool: pName
         });
         tIdx++;
     }
@@ -214,10 +258,20 @@ export class LevelManager {
               let startFreq = Math.pow(10, Math.log10(t.freq) + shift);
               startFreq = Math.max(minF, Math.min(maxF, startFreq));
 
+              if (t.pool === 'CB' || t.pool === 'Side') {
+                  if (t.type === 'peaking') {
+                      startFreq = Math.min(10000, startFreq);
+                      maxF = Math.min(12000, maxF);
+                  } else {
+                      startFreq = Math.min(12000, startFreq);
+                  }
+              }
+
               return {
                   id: `user_b${idx}`,
                   type: 'peaking' as BiquadFilterType,
                   freq: startFreq,
+                  initialFreq: startFreq,
                   gain: 0,
                   q: 1.0,
                   minFreq: minF,
@@ -229,15 +283,27 @@ export class LevelManager {
               // Unconstrained
               let startFreq = Math.pow(10, Math.log10(t.freq) + (Math.random() - 0.5) * 0.5);
               startFreq = Math.max(20, Math.min(20000, startFreq));
+              
+              let maxFreqLimit = undefined;
+              if (t.pool === 'CB' || t.pool === 'Side') {
+                  if (t.type === 'peaking') {
+                      startFreq = Math.min(10000, startFreq);
+                      maxFreqLimit = 12000;
+                  } else {
+                      startFreq = Math.min(12000, startFreq);
+                  }
+              }
 
               return {
                   id: `user_b${idx}`,
                   type: 'peaking' as BiquadFilterType,
                   freq: startFreq,
+                  initialFreq: startFreq,
                   gain: 0,
                   q: 1.0,
                   minGain: -24,
-                  maxGain: 24
+                  maxGain: 24,
+                  ...(maxFreqLimit ? { maxFreq: maxFreqLimit } : {})
               };
           }
       });

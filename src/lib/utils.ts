@@ -116,6 +116,8 @@ export interface EQNodeData {
   maxFreq?: number;
   minGain?: number;
   maxGain?: number;
+  initialFreq?: number;
+  pool?: string;
 }
 
 
