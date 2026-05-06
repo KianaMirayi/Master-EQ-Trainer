@@ -127,9 +127,21 @@ export class TrackManager {
             });
         });
 
+        const trackName = metadata.title || file.name.replace(/\.[^/.]+$/, "");
+        
+        // Prevent duplicates
+        const existingTrack = this.customTracks.find(t => 
+            (t.file && t.file.name === file.name && t.file.size === file.size) || 
+            (t.name === trackName && t.artist === metadata.artist && t.artist !== undefined)
+        );
+
+        if (existingTrack) {
+            return existingTrack;
+        }
+
         const track: Track = {
             id: `custom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name: metadata.title || file.name.replace(/\.[^/.]+$/, ""),
+            name: trackName,
             artist: metadata.artist,
             coverArt: metadata.coverArt,
             file: file,

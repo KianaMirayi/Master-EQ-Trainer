@@ -29,6 +29,12 @@ export default function App() {
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
   const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
+  const [uploadMessage, setUploadMessage] = useState<{ text: string, type: 'error' | 'info' | 'success' } | null>(null);
+
+  const displayUploadMessage = (text: string, type: 'error' | 'info' | 'success') => {
+    setUploadMessage({ text, type });
+    setTimeout(() => setUploadMessage(null), 3000);
+  };
 
   // Load from local storage and initialize indexedDB
   useEffect(() => {
@@ -43,8 +49,8 @@ export default function App() {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    let lastTrack = null;
     let addedCount = 0;
+    let newTracks: typeof tracks.custom = [];
     
     try {
       const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit per file
@@ -53,21 +59,29 @@ export default function App() {
         const file = files[i];
         
         if (!file.type.startsWith('audio/')) {
-          alert(`Skipped "${file.name}": Not a recognized audio file.`);
+          displayUploadMessage(`Skipped "${file.name}": Not a recognized audio file.`, 'error');
           continue;
         }
         
         if (file.size > MAX_FILE_SIZE) {
-          alert(`Skipped "${file.name}": File is too large. Please upload files under 50MB.`);
+          displayUploadMessage(`Skipped "${file.name}": File is too large. Please upload files under 50MB.`, 'error');
           continue;
         }
 
         try {
-          lastTrack = await TrackManager.addCustomTrack(file);
-          addedCount++;
+          const prevCount = TrackManager.getCustomTracks().length;
+          const track = await TrackManager.addCustomTrack(file);
+          const currentCount = TrackManager.getCustomTracks().length;
+          
+          if (prevCount === currentCount) {
+            displayUploadMessage(`Skipped "${file.name}": Track already exists.`, 'info');
+          } else {
+            newTracks.push(track);
+            addedCount++;
+          }
         } catch (err: any) {
           if (err.name === 'QuotaExceededError') {
-             alert('Browser storage is full! Please delete some custom tracks before uploading more.');
+             displayUploadMessage('Browser storage is full! Please delete some custom tracks before uploading more.', 'error');
              break;
           }
           throw err;
@@ -76,11 +90,12 @@ export default function App() {
       
       if (addedCount > 0) {
         setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-        if (lastTrack) setSelectedTrackId(lastTrack.id);
+        setSelectedTrackId(newTracks[newTracks.length - 1].id);
+        displayUploadMessage(`Successfully added ${addedCount} track(s).`, 'success');
       }
     } catch (err) {
       console.error('Failed to load track', err);
-      alert('Failed to load audio file.');
+      displayUploadMessage('Failed to load audio file.', 'error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -657,6 +672,15 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+                  {uploadMessage && (
+                    <div className={`text-xs px-3 py-2 mb-3 rounded border ${
+                      uploadMessage.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                      uploadMessage.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                      'bg-sky-500/10 border-sky-500/20 text-sky-400'
+                    }`}>
+                      {uploadMessage.text}
+                    </div>
+                  )}
                   <button 
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading}

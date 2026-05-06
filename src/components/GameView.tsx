@@ -522,27 +522,28 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
               </div>
           </div>
           
-          {/* Settled Feedback Overlay */}
-          <AnimatePresence>
-            {isSettled && showFeedbackMessage && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="absolute -top-6 md:-top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
-              >
-                  <div className="bg-slate-900/90 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
-                    {scoreReport!.stars >= 1 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <RotateCcw className="w-5 h-5 text-rose-400" />}
-                    <span className="font-medium text-slate-200">
-                        {scoreReport!.stars >= 1 ? "Good job! Review the curves below." : "Not quite. Check the difference."}
-                    </span>
-                  </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Canvas Wrapper */}
           <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a]/80 backdrop-blur-md mt-2 flex flex-col overflow-hidden">
+            
+            {/* Settled Feedback Overlay */}
+            <AnimatePresence>
+              {isSettled && showFeedbackMessage && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="absolute top-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+                >
+                    <div className="bg-slate-900/90 border border-slate-700 px-6 py-3 rounded-full backdrop-blur-md flex items-center gap-3 shadow-2xl">
+                      {scoreReport!.stars >= 1 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <RotateCcw className="w-5 h-5 text-rose-400" />}
+                      <span className="font-medium text-slate-200">
+                          {scoreReport!.stars >= 1 ? "Good job! Review the curves below." : "Not quite. Check the difference."}
+                      </span>
+                    </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="absolute top-4 left-4 z-10 text-xs text-slate-500 font-mono flex flex-col gap-1 pointer-events-none">
               <div>Drag: Frequency & Gain</div>
               <div>Alt + Drag: Q factor (Width)</div>
