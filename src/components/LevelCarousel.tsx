@@ -13,6 +13,8 @@ interface LevelCarouselProps {
   tiltZ?: number;
   cardWidth?: number;
   cardHeight?: number;
+  offsetY?: number; /* 控制卡片容器的垂直偏移 */
+  indicatorOffsetY?: number; /* 控制关卡指示器的垂直偏移 */
 }
 
 export function LevelCarousel({ 
@@ -23,7 +25,9 @@ export function LevelCarousel({
   tiltY = 90,
   tiltZ = 13,
   cardWidth = 280,
-  cardHeight = 366
+  cardHeight = 366,
+  offsetY = 0,
+  indicatorOffsetY = 0
 }: LevelCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,7 +108,7 @@ export function LevelCarousel({
 
   return (
     <motion.div 
-        className="relative w-full h-[550px] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing" 
+        className="relative w-full h-full min-h-[400px] flex flex-col items-center justify-center cursor-grab active:cursor-grabbing" 
         style={{ perspective: "1200px", touchAction: "pan-y" }}
         onWheel={handleWheel}
         onPan={handlePan}
@@ -115,7 +119,7 @@ export function LevelCarousel({
         */}
         <div 
           className="relative w-full max-w-5xl h-full flex items-center justify-center pointer-events-none"
-          style={{ transformStyle: "preserve-3d" }}
+          style={{ transformStyle: "preserve-3d", transform: `translateY(${offsetY}vh)` }}
         >
             <AnimatePresence initial={false}>
                 {levels.map((level, i) => {
@@ -261,7 +265,13 @@ export function LevelCarousel({
         </div>
 
         {/* Navigation Indicators / Controls */}
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-6">
+        <div 
+            className="absolute left-0 right-0 flex justify-center gap-6 z-50 pointer-events-auto"
+            style={{ 
+                bottom: '1rem', // Default bottom-4
+                transform: `translateY(${offsetY + indicatorOffsetY}vh)` 
+            }}
+        >
             <button 
               onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
               disabled={currentIndex === 0}

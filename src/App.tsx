@@ -238,6 +238,13 @@ export default function App() {
   // Dashboard View
   const levelsParams = Array.from({ length: 100 }, (_, i) => i + 1);
 
+  // Layout Offsets
+  const carouselOffsetY = 15; // 控制旋转木马视图整体（卡片+指示器）的位置，向下偏移15vh
+  const carouselIndicatorOffsetY = 8; // 单独控制旋转木马底部指示器的位置，正数向下，负数向上配合整体偏移
+  const gridOffsetY = 2; // 控制网格视图的垂直偏移，正数向下，负数向上配合整体居中
+  const gridMaxHeightVh = 45; // 控制网格视图的垂直显示范围(最大高度vh单位)。在此框内进行滚动，减小该值可让框体变扁（例如40~45可正好显示5行）
+
+
   return (
     <div className="relative w-screen h-screen overflow-hidden flex flex-col">
       <StarsBackground />
@@ -332,7 +339,7 @@ export default function App() {
           </div>
         </header>
 
-        <section className="mb-16">
+        <section className="flex-1 flex flex-col min-h-0 mb-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
               <h2 className="text-xl font-semibold flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-400" />
@@ -379,18 +386,27 @@ export default function App() {
           </div>
           
           {dashboardMode === 'carousel' ? (
-            <div className="mb-4 bg-transparent rounded-3xl border border-transparent p-4 relative pb-16">
+            <div className="flex-1 w-full bg-transparent p-4 relative flex items-center justify-center">
                <LevelCarousel 
                  levels={levelsParams} 
                  records={records} 
                  onSelectLevel={handleLevelSelect}
+                 offsetY={carouselOffsetY}
+                 indicatorOffsetY={carouselIndicatorOffsetY}
                />
             </div>
           ) : (
-            <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-4 mb-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4 py-3 px-2">
-                {levelsParams.map(level => {
-                  const check = ProgressionManager.checkEnterLevel(level);
+            <div className="flex-1 w-full flex flex-col items-center justify-center relative p-4">
+               <div 
+                 className="w-full overflow-y-auto custom-scrollbar pr-4 pb-16"
+                 style={{ 
+                   transform: `translateY(${gridOffsetY}vh)`,
+                   maxHeight: `${gridMaxHeightVh}vh`
+                 }}
+               >
+                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4 py-3 px-2">
+                   {levelsParams.map(level => {
+                     const check = ProgressionManager.checkEnterLevel(level);
                 const isUnlocked = check.allowed;
                 const record = records[level];
                 const isPassed = record?.passed;
@@ -443,7 +459,8 @@ export default function App() {
                   </button>
                 );
               })}
-              </div>
+                 </div>
+               </div>
             </div>
           )}
 

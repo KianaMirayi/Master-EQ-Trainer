@@ -3,16 +3,16 @@ import React, { useMemo } from 'react';
 const generateStars = (count: number) => {
   const shadows = [];
   for (let i = 0; i < count; i++) {
-    const x = Math.floor(Math.random() * 2000);
-    const y = Math.floor(Math.random() * 2000);
-    shadows.push(`${x}px ${y}px #fff`);
+    const x = Math.floor(Math.random() * 200); // 0 to 200vw
+    const y = Math.floor(Math.random() * 300); // 0 to 300vh
+    shadows.push(`${x}vw ${y}vh #fff`);
   }
   return shadows.join(', ');
 };
 
 const StarsBackground: React.FC = () => {
-  const stars1 = useMemo(() => generateStars(700), []);
-  const stars2 = useMemo(() => generateStars(200), []);
+  const stars1 = useMemo(() => generateStars(800), []);
+  const stars2 = useMemo(() => generateStars(300), []);
   const stars3 = useMemo(() => generateStars(100), []);
 
   return (
@@ -24,54 +24,61 @@ const StarsBackground: React.FC = () => {
         {`
           @keyframes animStar {
             from { transform: translateY(0px); }
-            to { transform: translateY(-2000px); }
+            to { transform: translateY(-150vh); }
           }
           
           .star-layer-1 {
+            position: absolute;
+            top: 0; left: 0;
             width: 1px;
             height: 1px;
             background: transparent;
             box-shadow: ${stars1};
-            animation: animStar 50s linear infinite;
+            animation: animStar 70s linear infinite;
           }
           .star-layer-1:after {
             content: " ";
             position: absolute;
-            top: 2000px;
+            top: 150vh;
+            left: 0;
             width: 1px;
             height: 1px;
             background: transparent;
             box-shadow: ${stars1};
           }
-
           .star-layer-2 {
+            position: absolute;
+            top: 0; left: 0;
             width: 2px;
             height: 2px;
             background: transparent;
             box-shadow: ${stars2};
-            animation: animStar 100s linear infinite;
+            animation: animStar 140s linear infinite;
           }
           .star-layer-2:after {
             content: " ";
             position: absolute;
-            top: 2000px;
+            top: 150vh;
+            left: 0;
             width: 2px;
             height: 2px;
             background: transparent;
             box-shadow: ${stars2};
           }
-
           .star-layer-3 {
+            position: absolute;
+            top: 0; left: 0;
             width: 3px;
             height: 3px;
             background: transparent;
             box-shadow: ${stars3};
-            animation: animStar 150s linear infinite;
+            animation: animStar 200s linear infinite;
           }
           .star-layer-3:after {
             content: " ";
             position: absolute;
-            top: 2000px;
+            top: 150vh;
+            left: 0;
             width: 3px;
             height: 3px;
             background: transparent;
