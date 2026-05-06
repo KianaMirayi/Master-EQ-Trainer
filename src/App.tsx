@@ -670,6 +670,9 @@ export default function App() {
                   <label className="flex items-center justify-between text-sm text-slate-400 mb-2">
                     <span>Custom Tracks</span>
                   </label>
+                  <p className="text-xs text-slate-500 mb-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+                    Your custom audio is processed purely locally in your browser. It will <strong>NOT</strong> be uploaded to the server, protecting your privacy and avoiding copyright risks.
+                  </p>
                   <div 
                     className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3 relative"
                     onDragOver={handleDragOver}
