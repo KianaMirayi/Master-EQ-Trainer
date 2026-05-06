@@ -32,6 +32,7 @@ interface EQCanvasProps {
   showGainHint?: boolean;
   gainRange?: [number, number];
   isScanning?: boolean;
+  onNodeSoloChange?: (isSolo: boolean) => void;
 }
 
 
@@ -143,7 +144,7 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9], isScanning = false }: EQCanvasProps) {
+export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9], isScanning = false, onNodeSoloChange }: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanStartTimeRef = useRef<number>(0);
@@ -167,6 +168,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const [hoveredNodeIdx, setHoveredNodeIdx] = useState<number | null>(null);
   const [fillHoverNodeIdx, setFillHoverNodeIdx] = useState<number | null>(null);
   const [listeningNodeIdx, setListeningNodeIdx] = useState<number | null>(null);
+  
+  useEffect(() => {
+    onNodeSoloChange?.(listeningNodeIdx !== null);
+  }, [listeningNodeIdx, onNodeSoloChange]);
+
   const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
   const [panelOffsets, setPanelOffsets] = useState<Record<number, number>>({});

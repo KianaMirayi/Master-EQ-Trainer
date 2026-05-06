@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Square, FastForward, CheckCircle2, RotateCcw, Volume2, Ear, Upload, Music, Activity, Bug, X, Power } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AudioEngine } from '../lib/AudioEngine';
@@ -55,6 +55,143 @@ interface GameViewProps {
 
 import { CalibrationManager } from '../lib/CalibrationManager';
 
+type TutorialStep = {
+  text: string;
+  targetId?: string;
+  nextText?: string;
+  hideNext?: boolean;
+}
+
+const TUTORIAL_STEPS: TutorialStep[] = [
+  { text: "", hideNext: true }, // 0
+  { 
+    text: "Oi！你的任务是尽力拟合目标声音。首先，点击上方的【Target】按钮，或者敲击C(Change)键 ，来听听我们要达成的目标声音。",
+    targetId: "tutorial-listen-mode",
+    nextText: "Next"
+  }, // 1
+  {
+    text: "Oi！听出区别了吗？现在切回【Your EQ】。请拖动图表中的黄色控制点看看。左右拖动改变频率，上下拖动改变增益。",
+    targetId: "tutorial-canvas",
+    nextText: "Next"
+  }, // 2
+  {
+    text: "Oi！听不到这个频段独有的声音特色？别急，按住面板中的耳机按钮，或者按住键盘的S键(Solo)，你就能听到这个频段的独特质感了。",
+    targetId: "tutorial-canvas", 
+    nextText: "Next"
+  }, // 3
+  {
+    text: "Oi！ 别忘记Bypass。现在，试着旁通这个节点，你可以按下B键(ByPass)？或者开关按钮？频点的面板或者下面的面板都可以。亦或者，最下面的BANDS？那里还有全局旁通呢。",
+    targetId: "tutorial-bottom-panel", 
+    nextText: "Next"  
+  }, // 4
+  {
+    text: "牛啊！除了位置，你还可以调整被影响区域的宽窄。按住键盘的 Alt 键 (Mac为Option) 并拖动节点（或直接使用鼠标滚轮滚动）来调整曲线的宽度。",
+    targetId: "tutorial-canvas",
+    nextText: "Next"
+  }, // 5
+  {
+    text: "Oi！当你以后遇到多个节点，除了鼠标选择，你同样可以使用A键、D键左右选择节点。当然，数字1-10也可以。",
+    targetId: "tutorial-canvas",
+    nextText: "Next"
+  }, // 6
+  {
+    text: "Oi！你已经掌握了所有基础操作！现在，尝试凭听觉将曲线调整到最接近目标的完美状态。满意后，点击右上方的【Submit Answer】 按钮（或按 Enter 键）提交计分吧！",
+    targetId: "tutorial-submit",
+    hideNext: true
+  }, // 7
+  {
+    text: "不知道你成绩如何，不过你可以在这里比较你的曲线和目标曲线，紫色的虚线就是目标曲线，尝试比较看看吧；",
+    targetId: "tutorial-canvas",
+    nextText: "关闭"
+  } // 8
+];
+
+function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => void, onClose: () => void }) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [maskDismissed, setMaskDismissed] = useState(false);
+  
+  useEffect(() => {
+    setMaskDismissed(false);
+    if (step === 7) {
+      const handlePointerDown = () => setMaskDismissed(true);
+      window.addEventListener('pointerdown', handlePointerDown);
+      return () => window.removeEventListener('pointerdown', handlePointerDown);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 0) return;
+    const config = TUTORIAL_STEPS[step];
+    
+    let frame: number;
+    const updateRect = () => {
+      if (config.targetId) {
+        const el = document.getElementById(config.targetId);
+        if (el) {
+          setRect(el.getBoundingClientRect());
+        } else {
+          setRect(null);
+        }
+      } else {
+        setRect(null);
+      }
+      frame = requestAnimationFrame(updateRect);
+    };
+    frame = requestAnimationFrame(updateRect);
+    return () => cancelAnimationFrame(frame);
+  }, [step]);
+  
+  if (step === 0 || step >= TUTORIAL_STEPS.length) return null;
+  const config = TUTORIAL_STEPS[step];
+
+  let maskStyle: React.CSSProperties = {
+    boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.75)',
+    left: rect ? rect.x - 8 : '10%',
+    top: rect ? rect.y - 8 : '10%',
+    width: rect ? rect.width + 16 : '80%',
+    height: rect ? rect.height + 16 : '80%',
+    opacity: (maskDismissed || step === 4) ? 0 : (rect ? 1 : 0.4),
+    borderRadius: '12px',
+    position: 'fixed',
+    pointerEvents: 'none',
+    transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+  };
+
+  return (
+     <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
+        <div style={maskStyle} />
+
+        <div 
+          className="absolute max-w-sm w-full bg-slate-900 border-2 border-indigo-500 rounded-xl p-5 shadow-[0_0_40px_rgba(99,102,241,0.2)] pointer-events-auto transition-all duration-500 ease-out"
+          style={{
+             left: rect ? Math.max(20, Math.min(window.innerWidth - 380, rect.x + rect.width / 2 - 190)) : '50%',
+             top: rect ? Math.max(20, Math.min(window.innerHeight - 200, rect.y + rect.height + 24)) : '50%',
+             transform: rect ? 'none' : 'translate(-50%, -50%)',
+             opacity: 1
+          }}
+        >
+          <div className="flex gap-3 items-start mb-4">
+             <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-lg text-white font-bold">
+                i
+             </div>
+             <p className="text-slate-200 text-sm leading-relaxed mt-1">{config.text}</p>
+          </div>
+          <div className="flex justify-end gap-3">
+            {config.nextText === "关闭" ? (
+               <button onClick={onClose} className="px-5 py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-lg font-medium text-sm transition shadow-lg">
+                 {config.nextText}
+               </button>
+            ) : !config.hideNext && (
+              <button onClick={onNext} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg font-medium text-sm transition shadow-lg">
+                 {config.nextText}
+              </button>
+            )}
+          </div>
+        </div>
+     </div>
+  );
+}
+
 export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack, onLevelChange }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -68,8 +205,26 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [scoreReport, setScoreReport] = useState<LevelScoreReport | null>(null);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayStars, setDisplayStars] = useState(0);
+  const [tutorialStep, setTutorialStep] = useState<number>(level === 1 ? 1 : 0);
+  const tutorialStepRef = useRef(tutorialStep);
+  useEffect(() => { tutorialStepRef.current = tutorialStep; }, [tutorialStep]);
+  const prevUserNodesRef = useRef<EQNodeData[]>([]);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
+
+  useEffect(() => {
+    if (level === 1 && retryTrigger > 0) {
+       setTutorialStep(1);
+    }
+  }, [level, retryTrigger]);
+
+  const handleNextTutorial = useCallback(() => {
+     setTutorialStep(s => s + 1);
+  }, []);
+
+  const handleCloseTutorial = useCallback(() => {
+     setTutorialStep(0);
+  }, []);
   const [trackName, setTrackName] = useState<string>('');
   const [trackArtist, setTrackArtist] = useState<string>('');
   const [trackCoverArt, setTrackCoverArt] = useState<string>('');
@@ -188,12 +343,6 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     }
   };
 
-  const handleModeChange = (mode: 'target' | 'user') => {
-    if (!engine) return;
-    engine.setListenMode(mode);
-    setListenMode(mode);
-  };
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Prevent rapid toggling if the key is held down
@@ -292,10 +441,36 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     if (!engine) return;
     setUserNodes(nodes);
     engine.setUserNodes(nodes);
+
+    if (tutorialStepRef.current === 2) {
+       setTutorialStep(3);
+    } else if (tutorialStepRef.current === 4) {
+       const bypassedChanged = nodes.some((n, i) => n.enabled !== prevUserNodesRef.current[i]?.enabled);
+       if (bypassedChanged) {
+         setTutorialStep(5);
+       }
+    } else if (tutorialStepRef.current === 5) {
+       const qChanged = nodes.some((n, i) => n.q !== prevUserNodesRef.current[i]?.q);
+       if (qChanged) {
+         setTutorialStep(6);
+       }
+    }
+    prevUserNodesRef.current = nodes;
+  };
+
+  const handleModeChange = (mode: 'target' | 'user') => {
+    if (!engine) return;
+    engine.setListenMode(mode);
+    setListenMode(mode);
+    
+    if (tutorialStepRef.current === 1 && mode === 'target') {
+        setTutorialStep(2);
+    }
   };
 
   const handleSubmit = () => {
     if (!engine || isScanning) return;
+    if (tutorialStepRef.current === 7) setTutorialStep(8);
     setIsScanning(true);
     setScoreReport(null);
     setIsSettled(false);
@@ -328,6 +503,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-transparent text-slate-50 font-sans">
+      <TutorialMask step={tutorialStep} onNext={handleNextTutorial} onClose={handleCloseTutorial} />
+      
       {/* Top Bar */}
       <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-md relative z-[100]">
         <div className="flex items-center gap-4 flex-1">
@@ -372,7 +549,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
         </div>
 
         <div className="flex-none flex items-center justify-center gap-3">
-          <div className="h-8 bg-slate-800 p-1 rounded-md flex items-center gap-1 min-w-[200px]">
+          <div id="tutorial-listen-mode" className="h-8 bg-slate-800 p-1 rounded-md flex items-center gap-1 min-w-[200px]">
             <button
               onClick={() => handleModeChange('target')}
               className={cn(
@@ -399,6 +576,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
         <div className="flex flex-1 justify-end items-center">
           {!isSettled ? (
             <button 
+              id="tutorial-submit"
               onClick={handleSubmit}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-md shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
             >
@@ -523,7 +701,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           </div>
           
           {/* Canvas Wrapper */}
-          <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a]/80 backdrop-blur-md mt-2 flex flex-col overflow-hidden">
+          <div id="tutorial-canvas" className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a]/80 backdrop-blur-md mt-2 flex flex-col overflow-hidden">
             
             {/* Settled Feedback Overlay */}
             <AnimatePresence>
@@ -564,6 +742,11 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
                         isScanning={isScanning}
                         listenMode={listenMode}
                         onListenModeChange={handleModeChange}
+                        onNodeSoloChange={(isSolo) => {
+                            if (isSolo && tutorialStepRef.current === 3) {
+                                setTutorialStep(4);
+                            }
+                        }}
                         showGainHint={config.showGainHint}
                         gainRange={config.gainRange}
                     />
@@ -572,7 +755,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
             </div>
             
             {/* Band Controls */}
-            <div className="h-16 shrink-0 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto justify-between">
+            <div id="tutorial-bottom-panel" className="h-16 shrink-0 px-4 border-t border-slate-800/60 bg-slate-900/40 flex items-center gap-4 overflow-x-auto justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest shrink-0">Bands:</span>
                 
