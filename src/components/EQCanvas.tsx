@@ -446,6 +446,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
 
+  // References for caching EQ Curves to avoid calculating every frame
+  const cachedTargetResponse = useRef<{ width: number, nodesStr: string, mid: Float32Array, side: Float32Array }>({ width: 0, nodesStr: '', mid: new Float32Array(), side: new Float32Array() });
+  const cachedUserResponse = useRef<{ width: number, nodesStr: string, mid: Float32Array, side: Float32Array }>({ width: 0, nodesStr: '', mid: new Float32Array(), side: new Float32Array() });
+  const cachedIndividualResponses = useRef<{ width: number, nodesStr: string, resps: any[] }>({ width: 0, nodesStr: '', resps: [] });
+
   const userNodesRef = useRef(userNodes);
   useEffect(() => {
     userNodesRef.current = userNodes;
@@ -651,8 +656,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const binCount = data.length;
         const sampleRate = engine.ctx.sampleRate || 48000;
         
-        // Use 1 point per 2 pixels for a high-res but smooth curve
-        const POINT_COUNT = Math.max(100, Math.floor(dimensions.width / 2));
+        // Optimize resolution: 1 point per 4 pixels reduces frame drops significantly on large screens
+        const POINT_COUNT = Math.max(80, Math.floor(dimensions.width / 4));
         
         // Initialize temporal envelope if needed
         if (!envelopeRef.current || envelopeRef.current.length !== POINT_COUNT) {
@@ -708,7 +713,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         }
 
         // Spatial Smoothing (Visual Log-Domain)
-        // 1. Dilate (Max Hold) to widen thin peaks slightly
+        // 1. Dilate (Max Hold)
         const dilatedPoints = new Float32Array(POINT_COUNT);
         const dilateRadius = 1; 
         for (let p = 0; p < POINT_COUNT; p++) {
@@ -722,9 +727,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             dilatedPoints[p] = maxP;
         }
 
-        // 2. Blur (Moving Average) to smooth edges heavily
+        // 2. Blur (Moving Average)
         const smoothedPoints = new Float32Array(POINT_COUNT);
-        const blurRadius = 6; // Increased visual smoothing window
+        const blurRadius = 3; // Reduced for performance, but still visually smooth due to canvas curve drawing
         for (let p = 0; p < POINT_COUNT; p++) {
              let sum = 0;
              let weightSum = 0;
@@ -829,9 +834,31 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           ctx.fillRect(0, 0, dimensions.width, dimensions.height);
       }
 
+      // Helper to get or update cached responses
+      const getCachedResponse = (isTarget: boolean) => {
+          if (isTarget) {
+              const currentStr = JSON.stringify(targetNodes);
+              if (cachedTargetResponse.current.width !== dimensions.width || cachedTargetResponse.current.nodesStr !== currentStr) {
+                  const res = engine.getFrequencyResponse(true, dimensions.width);
+                  cachedTargetResponse.current = { width: dimensions.width, nodesStr: currentStr, mid: res.mid, side: res.side };
+              }
+              return cachedTargetResponse.current;
+          } else {
+              const currentStr = JSON.stringify(userNodesRef.current);
+              if (cachedUserResponse.current.width !== dimensions.width || cachedUserResponse.current.nodesStr !== currentStr) {
+                  const res = engine.getFrequencyResponse(false, dimensions.width);
+                  cachedUserResponse.current = { width: dimensions.width, nodesStr: currentStr, mid: res.mid, side: res.side };
+              }
+              return cachedUserResponse.current;
+          }
+      };
+
       // --- Draw EQ curves ---
       const drawCurve = (isTarget: boolean, color: string, dashes: number[] = []) => {
-        const { mid: midResponse, side: sideResponse } = engine.getFrequencyResponse(isTarget, dimensions.width);
+        const cached = getCachedResponse(isTarget);
+        const midResponse = cached.mid;
+        const sideResponse = cached.side;
+
         const midY = dimensions.height / 2;
 
         let selectedMode = 'Stereo';
@@ -999,7 +1026,15 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
         // --- LAYER 2: Selected Node Active Fill ---
         if (!isTarget && fillHoverNodeIdx !== null && latestNodes.length > 0) {
-            const individualResponses = engine.getIndividualFrequencyResponses(false, dimensions.width);
+            const currentStr = JSON.stringify(userNodesRef.current);
+            if (cachedIndividualResponses.current.width !== dimensions.width || cachedIndividualResponses.current.nodesStr !== currentStr) {
+                cachedIndividualResponses.current = {
+                    width: dimensions.width,
+                    nodesStr: currentStr,
+                    resps: engine.getIndividualFrequencyResponses(false, dimensions.width)
+                };
+            }
+            const individualResponses = cachedIndividualResponses.current.resps;
             const activeIndResp = individualResponses[fillHoverNodeIdx];
             
             if (activeIndResp) {
@@ -1071,8 +1106,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       drawCurve(false, '#eab308'); // Main curve yellow
 
       if (showTarget || scanPhase === 1 || scanPhase === 2) {
-          const { mid: tgtMid } = engine.getFrequencyResponse(true, dimensions.width);
-          const { mid: usrMid } = engine.getFrequencyResponse(false, dimensions.width);
+          const tgtMid = getCachedResponse(true).mid;
+          const usrMid = getCachedResponse(false).mid;
           
           ctx.save();
           const drawWidth = dimensions.width * scanProgress;
