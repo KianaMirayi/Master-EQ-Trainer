@@ -323,13 +323,13 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   };
 
   if (!engine) {
-     return <div className="h-full w-full bg-slate-950"></div>;
+     return <div className="h-full w-full bg-transparent"></div>;
   }
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-slate-950 text-slate-50 font-sans">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-transparent text-slate-50 font-sans">
       {/* Top Bar */}
-      <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 relative z-50">
+      <header className="flex-none h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-md relative z-[100]">
         <div className="flex items-center gap-4 flex-1">
           <button onClick={onBack} className="text-slate-400 hover:text-white transition">
             ← Back
@@ -542,7 +542,7 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
           </AnimatePresence>
 
           {/* Canvas Wrapper */}
-          <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a] mt-2 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 relative rounded-xl border border-slate-800 shadow-2xl bg-[#14161a]/80 backdrop-blur-md mt-2 flex flex-col overflow-hidden">
             <div className="absolute top-4 left-4 z-10 text-xs text-slate-500 font-mono flex flex-col gap-1 pointer-events-none">
               <div>Drag: Frequency & Gain</div>
               <div>Alt + Drag: Q factor (Width)</div>

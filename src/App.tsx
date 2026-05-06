@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal } from 'lucide-react';
 import { EQNodeData, cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
-
+import StarsBackground from './components/StarsBackground';
+import { LevelCarousel } from './components/LevelCarousel';
 import { CalibrationSettings } from './components/CalibrationEditor';
 
 interface LevelScore {
@@ -15,6 +16,7 @@ interface LevelScore {
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration'>('dashboard');
+  const [dashboardMode, setDashboardMode] = useState<'grid' | 'carousel'>('carousel');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const [records, setRecords] = useState<Record<number, LevelRecord>>({});
@@ -237,7 +239,8 @@ export default function App() {
   const levelsParams = Array.from({ length: 100 }, (_, i) => i + 1);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-slate-950 flex flex-col">
+    <div className="relative w-screen h-screen overflow-hidden flex flex-col">
+      <StarsBackground />
       <AnimatePresence mode="wait">
         {currentView === 'game' && (
           <motion.div
@@ -269,7 +272,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="absolute inset-0 z-20 overflow-y-auto bg-slate-950"
+            className="absolute inset-0 z-20 overflow-y-auto bg-transparent backdrop-blur-sm"
           >
             <CalibrationSettings onBack={() => setCurrentView('dashboard')} />
           </motion.div>
@@ -282,7 +285,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="absolute inset-0 z-10 bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 bg-grid-pattern overflow-x-hidden overflow-y-auto"
+            className="absolute inset-0 z-10 bg-transparent text-slate-200 font-sans selection:bg-cyan-500/30 overflow-x-hidden overflow-y-auto"
           >
             <input 
               type="file" 
@@ -337,6 +340,23 @@ export default function App() {
               </h2>
               
               <div className="flex items-center gap-4">
+                <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1">
+                   <button 
+                     onClick={() => setDashboardMode('carousel')}
+                     className={cn("p-1.5 rounded-md transition-colors", dashboardMode === 'carousel' ? "bg-cyan-500/20 text-cyan-400" : "text-slate-500 hover:text-slate-300")}
+                     title="Carousel View"
+                   >
+                     <StretchHorizontal className="w-4 h-4" />
+                   </button>
+                   <button 
+                     onClick={() => setDashboardMode('grid')}
+                     className={cn("p-1.5 rounded-md transition-colors", dashboardMode === 'grid' ? "bg-cyan-500/20 text-cyan-400" : "text-slate-500 hover:text-slate-300")}
+                     title="Grid View"
+                   >
+                     <LayoutGrid className="w-4 h-4" />
+                   </button>
+                </div>
+
                 <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-1.5 rounded-lg">
                   <span className="text-sm text-slate-400 pl-2">Test Environment:</span>
                   <select 
@@ -358,96 +378,75 @@ export default function App() {
               </div>
           </div>
           
-          <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-4 mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4 py-3 px-2">
-              {levelsParams.map(level => {
-                const check = ProgressionManager.checkEnterLevel(level);
-              const isUnlocked = check.allowed;
-              const record = records[level];
-              const isPassed = record?.passed;
-              const isBoss = ProgressionManager.isBossLevel(level);
-              
-              return (
-                <button
-                  key={level}
-                  disabled={!isUnlocked}
-                  onClick={() => handleLevelSelect(level)}
-                  className={cn(
-                    "relative aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300",
-                    isUnlocked 
-                      ? "bg-slate-900 hover:bg-slate-800 hover:-translate-y-1 shadow-lg border border-slate-700/50 cursor-pointer" 
-                      : "bg-slate-900/40 border border-slate-800/50 opacity-60 cursor-not-allowed",
-                    isPassed && "border-emerald-500/30 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]",
-                    isBoss && "ring-2 ring-amber-500/50"
-                  )}
-                  title={!isUnlocked && !isPassed ? (check as any).message || (check as any).reason : ""}
-                >
-                  {isUnlocked ? (
-                    <span className={cn(
-                      "text-2xl font-bold font-mono tracking-tighter",
-                      isPassed ? "text-emerald-400" : (isBoss ? "text-amber-400" : "text-slate-200")
-                    )}>{level}</span>
-                  ) : (
-                    <Lock className="w-6 h-6 text-slate-600 mb-1" />
-                  )}
-                  
-                  {isUnlocked && (
-                    <div className="mt-0 flex flex-col items-center gap-1">
-                      {record !== undefined ? (
-                        <>
-                          <div className={cn("text-[10px] font-bold", isPassed ? "text-emerald-500" : "text-amber-500")}>
-                            {record.score} pts
-                          </div>
-                          <div className="flex items-center justify-center gap-0.5">
-                            {[1, 2, 3].map(i => (
-                              <svg key={i} className={cn("w-2.5 h-2.5", i <= record.stars ? "text-amber-400" : "text-slate-700")} fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                              </svg>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-[10px] font-medium tracking-widest text-slate-500 uppercase mt-1">NEW</span>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+          {dashboardMode === 'carousel' ? (
+            <div className="mb-4 bg-transparent rounded-3xl border border-transparent p-4 relative pb-16">
+               <LevelCarousel 
+                 levels={levelsParams} 
+                 records={records} 
+                 onSelectLevel={handleLevelSelect}
+               />
             </div>
-          </div>
-        </section>
+          ) : (
+            <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-10 gap-4 py-3 px-2">
+                {levelsParams.map(level => {
+                  const check = ProgressionManager.checkEnterLevel(level);
+                const isUnlocked = check.allowed;
+                const record = records[level];
+                const isPassed = record?.passed;
+                const isBoss = ProgressionManager.isBossLevel(level);
+                
+                return (
+                  <button
+                    key={level}
+                    disabled={!isUnlocked}
+                    onClick={() => handleLevelSelect(level)}
+                    className={cn(
+                      "relative aspect-square rounded-2xl flex flex-col items-center justify-center transition-all duration-300",
+                      isUnlocked 
+                        ? "bg-slate-900 hover:bg-slate-800 hover:-translate-y-1 shadow-lg border border-slate-700/50 cursor-pointer" 
+                        : "bg-slate-900/40 border border-slate-800/50 opacity-60 cursor-not-allowed",
+                      isPassed && "border-emerald-500/30 bg-emerald-950/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]",
+                      isBoss && "ring-2 ring-amber-500/50"
+                    )}
+                    title={!isUnlocked && !isPassed ? (check as any).message || (check as any).reason : ""}
+                  >
+                    {isUnlocked ? (
+                      <span className={cn(
+                        "text-2xl font-bold font-mono tracking-tighter",
+                        isPassed ? "text-emerald-400" : (isBoss ? "text-amber-400" : "text-slate-200")
+                      )}>{level}</span>
+                    ) : (
+                      <Lock className="w-6 h-6 text-slate-600 mb-1" />
+                    )}
+                    
+                    {isUnlocked && (
+                      <div className="mt-0 flex flex-col items-center gap-1">
+                        {record !== undefined ? (
+                          <>
+                            <div className={cn("text-[10px] font-bold", isPassed ? "text-emerald-500" : "text-amber-500")}>
+                              {record.score} pts
+                            </div>
+                            <div className="flex items-center justify-center gap-0.5">
+                              {[1, 2, 3].map(i => (
+                                <svg key={i} className={cn("w-2.5 h-2.5", i <= record.stars ? "text-amber-400" : "text-slate-700")} fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-medium tracking-widest text-slate-500 uppercase mt-1">NEW</span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+              </div>
+            </div>
+          )}
 
-        <section>
-          <h2 className="text-xl font-semibold mb-6">Unlockables</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex items-start gap-4 transition hover:bg-slate-900">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
-                <BarChart2 className="w-6 h-6 text-indigo-400" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-200 mb-1">Advanced Stats</h3>
-                <p className="text-sm text-slate-400 mb-3">Identify frequency zones where you tend to misjudge.</p>
-                <div className="text-xs font-bold text-indigo-500 tracking-wider">UNLOCKS AT LVL 10</div>
-              </div>
-            </div>
-
-            <div className="bg-slate-800/80 border border-emerald-500/30 rounded-2xl p-6 flex items-start gap-4 transition shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-                <FolderDown className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-200 mb-1">Import Audio</h3>
-                <p className="text-sm text-slate-400 mb-3">Upload your own stems and reference tracks to train on.</p>
-                <div className="text-xs font-bold text-emerald-400 tracking-wider flex items-center gap-2">
-                  <span>UNLOCKED (DEV MODE)</span>
-                  <span className="text-slate-500 line-through">LVL 20</span>
-                </div>
-              </div>
-            </div>
-            
-          </div>
         </section>
 
       </div>
