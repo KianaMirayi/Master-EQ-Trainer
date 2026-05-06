@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { PlayerProfileManager, PlayerStats } from '../lib/PlayerProfileManager';
-import { Trophy, Activity, Target } from 'lucide-react';
+import { Trophy, Activity, Target, User, CloudUpload } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Props {
   stats: PlayerStats;
+  isLoggedIn?: boolean;
+  onLoginToggle?: () => void;
 }
 
 const CustomTick = ({ payload, x, y, textAnchor, stroke, radius, radarData }: any) => {
@@ -33,7 +35,7 @@ const CustomTick = ({ payload, x, y, textAnchor, stroke, radius, radarData }: an
   );
 };
 
-export function UserProfileDashboard({ stats }: Props) {
+export function UserProfileDashboard({ stats, isLoggedIn, onLoginToggle }: Props) {
   const radarData = useMemo(() => PlayerProfileManager.calculateRadarMap(stats), [stats]);
   const personas = useMemo(() => PlayerProfileManager.getPersonas(stats), [stats]);
   const achievements = useMemo(() => PlayerProfileManager.getAchievements(stats), [stats]);
@@ -91,6 +93,41 @@ export function UserProfileDashboard({ stats }: Props) {
       {/* Right Column: Personas & Achievements */}
       <div className="w-full md:w-80 flex flex-col gap-6 shrink-0">
         
+        {/* Cloud Sync Widget */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <CloudUpload className="w-4 h-4 text-cyan-400" />
+            Cloud Sync & Global Rank
+          </h2>
+          {isLoggedIn ? (
+            <div className="flex flex-col gap-3">
+              <div className="text-sm text-emerald-400 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Data sync is active
+              </div>
+              <button 
+                onClick={onLoginToggle}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-lg transition-colors border border-slate-700"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Sign in to sync your progress across devices and join the global acoustic mastery leaderboard.
+              </p>
+              <button 
+                onClick={onLoginToggle}
+                className="w-full py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
+              >
+                <User className="w-4 h-4" />
+                Sign In with Google
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Personas Widget */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -102,7 +139,7 @@ export function UserProfileDashboard({ stats }: Props) {
               数据不足以生成画像，请多完成几次调音闯关吧！
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 max-h-56 overflow-y-auto custom-scrollbar pr-2">
               {personas.map((p, i) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
@@ -133,7 +170,7 @@ export function UserProfileDashboard({ stats }: Props) {
                还没有获得成就...
              </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-2 pb-2">
               {achievements.map((ach, i) => (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}

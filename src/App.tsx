@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User } from 'lucide-react';
 import { EQNodeData, cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
 import StarsBackground from './components/StarsBackground';
 import { LevelCarousel } from './components/LevelCarousel';
 import { CalibrationSettings } from './components/CalibrationEditor';
+import { LeaderboardModal } from './components/LeaderboardModal';
 
 import { UserProfileDashboard } from './components/UserProfileDashboard';
 import { PlayerProfileManager } from './lib/PlayerProfileManager';
@@ -29,6 +30,8 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
   const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
@@ -185,6 +188,17 @@ export default function App() {
 
   const renderModals = () => (
     <>
+      <AnimatePresence>
+        {isLeaderboardOpen && (
+          <LeaderboardModal 
+            onClose={() => setIsLeaderboardOpen(false)} 
+            isLoggedIn={isLoggedIn} 
+            onLogin={() => setIsLoggedIn(true)} 
+            masteryScore={masteryScore} 
+          />
+        )}
+      </AnimatePresence>
+      
       {showPeakCongratulation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.2)] animate-in fade-in zoom-in duration-300">
@@ -344,7 +358,11 @@ export default function App() {
               </button>
             </div>
             <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden">
-              <UserProfileDashboard stats={PlayerProfileManager.loadStats()} />
+              <UserProfileDashboard 
+                stats={PlayerProfileManager.loadStats()} 
+                isLoggedIn={isLoggedIn}
+                onLoginToggle={() => setIsLoggedIn(!isLoggedIn)}
+              />
             </div>
           </motion.div>
         )}
@@ -381,26 +399,30 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-2 rounded-xl">
+            <button 
+              onClick={() => setIsLeaderboardOpen(true)}
+              className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-2 rounded-xl hover:bg-slate-800 transition cursor-pointer text-left"
+              title="View Leaderboards"
+            >
               <div className="px-4 py-2 flex flex-col items-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Mastery</span>
                 <span className="text-xl font-mono font-bold text-cyan-400">{masteryScore}</span>
               </div>
               <div className="w-px h-8 bg-slate-800"></div>
               <div className="px-4 py-2 flex flex-col items-center">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Global Rank</span>
-                <span className="text-xl font-mono font-bold text-emerald-400">Top 5%</span> 
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">AMI Score</span>
+                <span className="text-xl font-mono font-bold text-emerald-400">{isLoggedIn ? "9500" : "-"}</span> 
               </div>
-            </div>
+            </button>
             
             <button 
               onClick={() => setCurrentView('profile')}
-              className="p-3.5 bg-slate-900 hover:bg-indigo-900/40 border border-slate-800 rounded-xl text-indigo-400 hover:text-indigo-300 transition shadow-sm"
-              title="Player Profile / Radar"
+              className={cn("p-3.5 border rounded-xl transition shadow-sm", isLoggedIn ? "bg-cyan-900/20 border-cyan-800 text-cyan-400 hover:bg-cyan-900/40" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
+              title={isLoggedIn ? "Player Profile" : "Sign In / Profile"}
             >
-              <Activity className="w-5 h-5" />
+              {isLoggedIn ? <User className="w-5 h-5" /> : <User className="w-5 h-5 opacity-50" />}
             </button>
-
+            
             <button 
               onClick={() => setIsSettingsOpen(true)}
               className="p-3.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition shadow-sm"

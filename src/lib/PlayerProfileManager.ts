@@ -1,17 +1,22 @@
 import { ProgressionManager } from './ProgressionManager';
 
 export interface PlayerStats {
-  levelsPlayed: number;
-  levelsCompleted: number; // 1+ stars
-  totalStars: number;
-  totalTimeSpent: number;
-  retriesCount: number;
-  totalFreqError: number; // Cumulative error in semitones/cents
-  totalQError: number; // Cumulative difference
-  totalGainError: number; // Cumulative difference
-  extremeGainCount: number; // Number of times gain was > 10 or < -10
-  totalUserQSum: number; // Sum of average Q used per level
-  totalSweepEvents: number; // Proxy for how much dragging happens
+  // === 基础进度参数 / Basic Progress ===
+  levelsPlayed: number;      // 玩家开始过的总关卡数
+  levelsCompleted: number;   // 成功过关（至少获得1星）的关卡总数
+  totalStars: number;        // 累计获得的总星数
+  totalTimeSpent: number;    // 累计游戏时长（秒），用于计算决策速度
+  retriesCount: number;      // 累计重试次数，反映玩家的耐心和受挫能力
+  
+  // === 调音能力参数 / EQ Skills ===
+  totalFreqError: number;    // 寻找目标频率的误差总和（用于计算听觉精度）
+  totalQError: number;       // Q值设定的误差总和（用于计算频宽感知）
+  totalGainError: number;    // 增益大小的误差总和（用于计算操作克制度）
+  
+  // === 操作习惯参数 / Behavior Analytics ===
+  extremeGainCount: number;  // 极限增益（大于10dB或小于-10dB）的使用次数
+  totalUserQSum: number;     // 玩家设定的Q值总和（用于计算玩家偏好的Q值大小，粗/细）
+  totalSweepEvents: number;  // 频率扫频（鼠标拖拽寻找频率）的累计触发次数
 }
 
 export const DEFAULT_STATS: PlayerStats = {
@@ -130,10 +135,17 @@ export class PlayerProfileManager {
     if (stats.levelsPlayed < 2) return [];
 
     const personas = [];
-    const avgQ = stats.totalUserQSum / stats.levelsPlayed;
-    const avgTime = stats.totalTimeSpent / stats.levelsPlayed;
-    const extremeRatio = stats.extremeGainCount / stats.levelsPlayed;
-    const sweepRatio = stats.totalSweepEvents / stats.levelsPlayed;
+    
+    // 你可以利用上面暴露的参数进行任意二次计算，得出平均值或比率
+    // === 以下是一些常用的衍生运算参考 ===
+    const avgQ = stats.totalUserQSum / stats.levelsPlayed;            // 场均玩家Q值偏好大小
+    const avgTime = stats.totalTimeSpent / stats.levelsPlayed;        // 场均决策所用时间
+    const extremeRatio = stats.extremeGainCount / stats.levelsPlayed; // 场均使用极限增益的频率
+    const sweepRatio = stats.totalSweepEvents / stats.levelsPlayed;   // 场均鼠标拖拽扫频的频次
+    // const avgFreqError = stats.totalFreqError / stats.levelsPlayed;// 场均频率误差（可以用作"金耳朵"指标）
+    // const winRate = stats.levelsCompleted / stats.levelsPlayed;    // 过关胜率
+    
+    // 增加画像的方式： if (你的计算条件) { personas.push(...) }
 
     if (avgQ > 0 && avgQ < 1.2) {
       personas.push({ icon: '🔪', title: '外科医生 (The Surgeon)', desc: '偏好极小的Q值，喜欢做精准的频段切除' });
@@ -158,18 +170,56 @@ export class PlayerProfileManager {
 
   static getAchievements(stats: PlayerStats) {
     const ach = [];
+    
+    // 你可以直接访问 stats.XXX 原始数据进行数值判断
+    // 也可以复用 stats.totalStars / stats.levelsPlayed 等二次计算的结果
+    // 添加任何新成就只需要在此处补充一个 `if(条件) ach.push(...)` 即可
+    
     if (stats.totalStars >= 3) {
       ach.push({ icon: '🌟', title: '初试啼声', desc: '累计获得3颗星' });
     }
     if (stats.totalStars >= 30) {
       ach.push({ icon: '⭐', title: '金牌混音师', desc: '累计获得30颗星' });
     }
+    if (stats.totalStars >= 100) {
+      ach.push({ icon: '💎', title: '钻石铂金耳', desc: '累计获得100颗星' });
+    }
+    if (stats.totalStars >= 300) {
+      ach.push({ icon: '👑', title: '声学幻神', desc: '累计获得300颗星，音之主宰！' });
+    }
+
     if (stats.levelsCompleted >= 5) {
       ach.push({ icon: '🎧', title: '渐入佳境', desc: '成功通关5个不同关卡' });
     }
-    if (stats.retriesCount >= 10) {
-      ach.push({ icon: '🔥', title: '百折不挠', desc: '累计重试10次以上' });
+    if (stats.levelsCompleted >= 50) {
+      ach.push({ icon: '📻', title: '行业老兵', desc: '成功通关50个不同关卡' });
     }
+    if (stats.levelsCompleted >= 100) {
+      ach.push({ icon: '🏆', title: '大满贯', desc: '成功通关100个不同关卡' });
+    }
+
+    if (stats.retriesCount >= 10) {
+      ach.push({ icon: '🔥', title: '百折不挠', desc: '累计重试10次，不言放弃' });
+    }
+    if (stats.retriesCount >= 50) {
+      ach.push({ icon: '🦾', title: '千锤百炼', desc: '累计重试20次，毅力惊人' });
+    }
+
+    if (stats.totalSweepEvents >= 1000) {
+      ach.push({ icon: '🌊', title: '冲浪达人', desc: '累计扫频操作超过1000次' });
+    }
+    if (stats.extremeGainCount >= 20) {
+      ach.push({ icon: '💣', title: '重型装甲', desc: '累计使用极限增益超过20次' });
+    }
+    
+    // Skill-based achievements based on averages
+    if (stats.levelsPlayed >= 10 && (stats.totalTimeSpent / stats.levelsPlayed) < 25) {
+      ach.push({ icon: '⚡', title: '闪电手', desc: '10关以上平均单关决策时间少于25秒' });
+    }
+    if (stats.levelsPlayed >= 10 && (stats.totalStars / stats.levelsPlayed) >= 2.8) {
+      ach.push({ icon: '🎯', title: '绝对音感', desc: '10关以上保持场均2.8星以上的极高评价' });
+    }
+
     return ach;
   }
 }
