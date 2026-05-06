@@ -9,13 +9,16 @@ import StarsBackground from './components/StarsBackground';
 import { LevelCarousel } from './components/LevelCarousel';
 import { CalibrationSettings } from './components/CalibrationEditor';
 
+import { UserProfileDashboard } from './components/UserProfileDashboard';
+import { PlayerProfileManager } from './lib/PlayerProfileManager';
+
 interface LevelScore {
   level: number;
   score: number;
 }
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile'>('dashboard');
   const [dashboardMode, setDashboardMode] = useState<'grid' | 'carousel'>('carousel');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
@@ -300,6 +303,30 @@ export default function App() {
           </motion.div>
         )}
 
+        {currentView === 'profile' && (
+          <motion.div
+            key="profile"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-md flex flex-col"
+          >
+            <div className="flex items-center p-6 border-b border-slate-800 bg-slate-900/50">
+              <button 
+                onClick={() => setCurrentView('dashboard')} 
+                className="flex items-center gap-2 text-slate-400 hover:text-white transition"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                <span className="font-semibold tracking-wide">Back to Dashboard</span>
+              </button>
+            </div>
+            <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden">
+              <UserProfileDashboard stats={PlayerProfileManager.loadStats()} />
+            </div>
+          </motion.div>
+        )}
+
         {currentView === 'dashboard' && (
           <motion.div
             key="dashboard"
@@ -344,6 +371,14 @@ export default function App() {
               </div>
             </div>
             
+            <button 
+              onClick={() => setCurrentView('profile')}
+              className="p-3.5 bg-slate-900 hover:bg-indigo-900/40 border border-slate-800 rounded-xl text-indigo-400 hover:text-indigo-300 transition shadow-sm"
+              title="Player Profile / Radar"
+            >
+              <Activity className="w-5 h-5" />
+            </button>
+
             <button 
               onClick={() => setIsSettingsOpen(true)}
               className="p-3.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition shadow-sm"

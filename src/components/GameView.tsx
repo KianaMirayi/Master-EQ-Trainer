@@ -9,6 +9,7 @@ import { EQCanvas, BAND_COLORS } from './EQCanvas';
 import { LevelMeter } from './LevelMeter';
 import { WaveformPlayer } from './WaveformPlayer';
 import { TrackManager, Track } from '../lib/TrackManager';
+import { PlayerProfileManager } from '../lib/PlayerProfileManager';
 
 const bufferCache = new Map<string, Promise<AudioBuffer>>();
 
@@ -212,6 +213,11 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
 
+  // Player Stats tracking
+  const levelStartTimeRef = useRef<number>(0);
+  const totalSweepEventsRef = useRef<number>(0);
+  const firstFreqErrorRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (level === 1 && retryTrigger > 0) {
        setTutorialStep(1);
@@ -292,6 +298,12 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       engine!.setTargetNodes(tNodes);
       engine!.setUserNodes(uNodes);
       engine!.setListenMode('user');
+
+      // Reset Player Stats tracking for this level run
+      levelStartTimeRef.current = performance.now();
+      totalSweepEventsRef.current = 0;
+      firstFreqErrorRef.current = null;
+      prevUserNodesRef.current = [];
       setListenMode('user');
       setIsSettled(false);
       setScoreReport(null);
@@ -442,6 +454,24 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     setUserNodes(nodes);
     engine.setUserNodes(nodes);
 
+    totalSweepEventsRef.current += 1;
+
+    // Record initial freq error if not recorded yet and nodes have frequency.
+    // Calculate simple average diff in semitones
+    if (firstFreqErrorRef.current === null && nodes.length > 0 && targetNodes.length > 0) {
+      // Find difference between each user node and nearest target node
+      let totalErr = 0;
+      nodes.forEach(un => {
+        let minErr = Infinity;
+        targetNodes.forEach(tn => {
+          const stErr = Math.abs(12 * Math.log2(un.freq / tn.freq));
+          if (stErr < minErr) minErr = stErr;
+        });
+        totalErr += minErr;
+      });
+      firstFreqErrorRef.current = totalErr / nodes.length;
+    }
+
     if (tutorialStepRef.current === 2) {
        setTutorialStep(3);
     } else if (tutorialStepRef.current === 4) {
@@ -475,6 +505,9 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
     setScoreReport(null);
     setIsSettled(false);
 
+    // Calculate time spent
+    const timeSpent = (performance.now() - levelStartTimeRef.current) / 1000;
+    
     // Give visual animation time to complete before showing score details
     setTimeout(() => {
       setIsScanning(false);
@@ -483,6 +516,53 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       setIsSettled(true);
       setShowFeedbackMessage(true);
       handleModeChange('user');
+
+      // Update Player Stats
+      const currentStats = PlayerProfileManager.loadStats();
+      let totalQ = 0;
+      let qError = 0;
+      let gainError = 0;
+      let extremeGains = 0;
+
+      userNodes.forEach(un => {
+        totalQ += un.q;
+        if (Math.abs(un.gain) > 10) extremeGains++;
+
+        // Nearest target node for error calculation
+        let minQErr = Infinity;
+        let minGainErr = Infinity;
+        targetNodes.forEach(tn => {
+          const qd = Math.abs(un.q - tn.q);
+          const gd = Math.abs(un.gain - tn.gain);
+          if (qd < minQErr) minQErr = qd;
+          if (gd < minGainErr) minGainErr = gd;
+        });
+        if (targetNodes.length > 0) {
+           qError += minQErr;
+           gainError += minGainErr;
+        }
+      });
+      
+      const qErrAvg = userNodes.length > 0 ? qError / userNodes.length : 0;
+      const gainErrAvg = userNodes.length > 0 ? gainError / userNodes.length : 0;
+      const userQAvg = userNodes.length > 0 ? totalQ / userNodes.length : 0;
+
+      const newStats = {
+        ...currentStats,
+        levelsPlayed: currentStats.levelsPlayed + 1,
+        levelsCompleted: report.stars >= 1 ? currentStats.levelsCompleted + 1 : currentStats.levelsCompleted,
+        totalStars: currentStats.totalStars + report.stars,
+        totalTimeSpent: currentStats.totalTimeSpent + timeSpent,
+        totalFreqError: currentStats.totalFreqError + (firstFreqErrorRef.current || 0),
+        totalQError: currentStats.totalQError + qErrAvg,
+        totalGainError: currentStats.totalGainError + gainErrAvg,
+        extremeGainCount: currentStats.extremeGainCount + extremeGains,
+        totalUserQSum: currentStats.totalUserQSum + userQAvg,
+        totalSweepEvents: currentStats.totalSweepEvents + totalSweepEventsRef.current
+      };
+      
+      PlayerProfileManager.saveStats(newStats);
+
     }, 1400);
   };
 
@@ -491,6 +571,8 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       if (scoreReport.stars >= 1) { // 1 star is passing
         onLevelComplete(scoreReport.totalScore, scoreReport.stars);
       } else {
+        const stats = PlayerProfileManager.loadStats();
+        PlayerProfileManager.saveStats({ ...stats, retriesCount: stats.retriesCount + 1 });
         onRetry(scoreReport.totalScore, scoreReport.stars);
         setRetryTrigger(r => r + 1);
       }
