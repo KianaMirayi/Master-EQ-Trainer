@@ -159,9 +159,11 @@ export default function App() {
   };
 
   const handleLevelComplete = (score: number, stars: number) => {
-    saveScore(activeLevel, score, stars);
+    if (!isTestMode) {
+      saveScore(activeLevel, score, stars);
+    }
     
-    if (activeLevel === 100) {
+    if (activeLevel === 100 && !isTestMode) {
       setShowPeakCongratulation(true);
       return;
     }
@@ -171,11 +173,13 @@ export default function App() {
       return;
     }
 
-    const nextLevel = activeLevel + 1;
-    if (ProgressionManager.checkEnterLevel(nextLevel).allowed) {
-      setActiveLevel(nextLevel);
-    } else {
-      setCurrentView('dashboard');
+    if (!isTestMode) {
+      const nextLevel = activeLevel + 1;
+      if (ProgressionManager.checkEnterLevel(nextLevel).allowed) {
+        setActiveLevel(nextLevel);
+      } else {
+        setCurrentView('dashboard');
+      }
     }
   };
 
@@ -262,6 +266,22 @@ export default function App() {
   const gridOffsetY = 2; // 控制网格视图的垂直偏移，正数向下，负数向上配合整体居中
   const gridMaxHeightVh = 45; // 控制网格视图的垂直显示范围(最大高度vh单位)。在此框内进行滚动，减小该值可让框体变扁（例如40~45可正好显示5行）
 
+  const maxPassedLevel = Math.max(0, ...passedLevels);
+  let titleStr = "音频新手 (Audio Rookie)";
+  let titleColor = "text-slate-400";
+  let badgeColor = "bg-slate-800 border-slate-700";
+
+  if (maxPassedLevel >= 100) { titleStr = "声学幻神 / 调音之神 (God of Sound)"; titleColor = "text-yellow-400"; badgeColor = "bg-yellow-500/20 border-yellow-500/50"; }
+  else if (maxPassedLevel >= 90) { titleStr = "声音雕塑师 (Sound Sculpture)"; titleColor = "text-amber-400"; badgeColor = "bg-amber-500/20 border-amber-500/50"; }
+  else if (maxPassedLevel >= 80) { titleStr = "金耳朵 (Golden Ear)"; titleColor = "text-orange-400"; badgeColor = "bg-orange-500/20 border-orange-500/50"; }
+  else if (maxPassedLevel >= 70) { titleStr = "首席母带师 (Mastering Engineer)"; titleColor = "text-rose-400"; badgeColor = "bg-rose-500/20 border-rose-500/50"; }
+  else if (maxPassedLevel >= 60) { titleStr = "资深声学师 (Senior Acoustician)"; titleColor = "text-pink-400"; badgeColor = "bg-pink-500/20 border-pink-500/50"; }
+  else if (maxPassedLevel >= 50) { titleStr = "录音棚大拿 (Studio Engineer)"; titleColor = "text-fuchsia-400"; badgeColor = "bg-fuchsia-500/20 border-fuchsia-500/50"; }
+  else if (maxPassedLevel >= 40) { titleStr = "驻场调音师 (House Engineer)"; titleColor = "text-purple-400"; badgeColor = "bg-purple-500/20 border-purple-500/50"; }
+  else if (maxPassedLevel >= 30) { titleStr = "频段工匠 (Frequency Crafter)"; titleColor = "text-violet-400"; badgeColor = "bg-violet-500/20 border-violet-500/50"; }
+  else if (maxPassedLevel >= 20) { titleStr = "混音助理 (Mixing Assistant)"; titleColor = "text-indigo-400"; badgeColor = "bg-indigo-500/20 border-indigo-500/50"; }
+  else if (maxPassedLevel >= 10) { titleStr = "调音学徒 (Audio Apprentice)"; titleColor = "text-blue-400"; badgeColor = "bg-blue-500/20 border-blue-500/50"; }
+
 
   return (
     <div className="relative w-screen h-screen overflow-hidden flex flex-col">
@@ -280,7 +300,9 @@ export default function App() {
               level={activeLevel} 
               selectedTrackId={selectedTrackId} 
               onLevelComplete={handleLevelComplete} 
-              onRetry={(score, stars) => saveScore(activeLevel, score, stars)}
+              onRetry={(score, stars) => {
+                if (!isTestMode) saveScore(activeLevel, score, stars);
+              }}
               onBack={() => {
                  setIsTestMode(false);
                  setCurrentView('dashboard');
@@ -391,10 +413,15 @@ export default function App() {
 
         <section className="flex-1 flex flex-col min-h-0 mb-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                Journey
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  Journey
+                </h2>
+                <div className={cn("px-2.5 py-1 rounded-md text-xs font-medium border", badgeColor, titleColor)}>
+                  {titleStr}
+                </div>
+              </div>
               
               <div className="flex items-center gap-4">
                 <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1">
@@ -414,24 +441,7 @@ export default function App() {
                    </button>
                 </div>
 
-                <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-1.5 rounded-lg">
-                  <span className="text-sm text-slate-400 pl-2">Test Environment:</span>
-                  <select 
-                    className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-2 py-1 outline-none focus:border-cyan-500"
-                    onChange={(e) => {
-                       const lvl = parseInt(e.target.value);
-                       if (!isNaN(lvl)) {
-                          handleLevelSelect(lvl, true);
-                       }
-                    }}
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Select Core Level (1-100)...</option>
-                    {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
-                       <option key={l} value={l}>Level {l}</option>
-                    ))}
-                  </select>
-                </div>
+
               </div>
           </div>
           
@@ -730,6 +740,29 @@ export default function App() {
               </div>
             )}
           </div>
+          {settingsView === 'main' && (
+            <div className="p-6 border-t border-slate-800 bg-slate-900 mt-auto">
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-slate-400">Test Environment</span>
+                <select 
+                  className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-3 py-2 outline-none focus:border-cyan-500 w-full"
+                  onChange={(e) => {
+                     const lvl = parseInt(e.target.value);
+                     if (!isNaN(lvl)) {
+                        setIsSettingsOpen(false);
+                        handleLevelSelect(lvl, true);
+                     }
+                  }}
+                  value=""
+                >
+                  <option value="" disabled>Select Core Level (1-100)...</option>
+                  {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
+                     <option key={l} value={l}>Level {l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       </motion.div>

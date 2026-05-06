@@ -4,6 +4,20 @@ import { Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ProgressionManager } from '../lib/ProgressionManager';
 
+const getBossUnlockTitle = (level: number) => {
+  if (level === 10) return "调音学徒认证";
+  if (level === 20) return "混音助理认证";
+  if (level === 30) return "频段工匠认证";
+  if (level === 40) return "驻场调音师认证";
+  if (level === 50) return "录音棚大拿认证";
+  if (level === 60) return "资深声学师认证";
+  if (level === 70) return "首席母带师认证";
+  if (level === 80) return "金耳朵认证";
+  if (level === 90) return "声音雕塑师认证";
+  if (level === 100) return "声学幻神 / 调音之神认证";
+  return null;
+};
+
 interface LevelCarouselProps {
   levels: number[];
   records: Record<number, { passed: boolean; score: number; stars: number; trackId?: string }>;
@@ -230,6 +244,14 @@ export function LevelCarousel({
                                     </span>
                                 ) : (
                                     <Lock className="w-10 h-10 text-slate-500 mb-2 drop-shadow-md" />
+                                )}
+                                
+                                {isBoss && !isPassed && (
+                                    <div className="mt-3 text-center">
+                                        <span className="text-amber-500/80 text-xs font-bold tracking-widest drop-shadow-md">
+                                            {getBossUnlockTitle(level)}
+                                        </span>
+                                    </div>
                                 )}
                                 
                                 {isUnlocked && (
