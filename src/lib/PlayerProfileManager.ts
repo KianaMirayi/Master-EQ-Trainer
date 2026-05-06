@@ -132,7 +132,7 @@ export class PlayerProfileManager {
   }
 
   static getPersonas(stats: PlayerStats) {
-    if (stats.levelsPlayed < 2) return [];
+    if (stats.levelsPlayed < 1) return [];
 
     const personas = [];
     
@@ -163,6 +163,10 @@ export class PlayerProfileManager {
 
     if (extremeRatio >= 1.0) {
       personas.push({ icon: '🧨', title: '破坏之王 (The Over-cooker)', desc: '偏好极致的增益，属于“下重手”调音' });
+    }
+    
+    if (personas.length === 0 && stats.levelsPlayed >= 1) {
+      personas.push({ icon: '⚖️', title: '中庸之道 (The Balanced)', desc: '操作非常均衡，没有过于极端的偏好' });
     }
 
     return personas;

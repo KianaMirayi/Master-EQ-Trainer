@@ -313,6 +313,7 @@ export default function App() {
             <GameView 
               level={activeLevel} 
               selectedTrackId={selectedTrackId} 
+              isTestMode={isTestMode}
               onLevelComplete={handleLevelComplete} 
               onRetry={(score, stars) => {
                 if (!isTestMode) saveScore(activeLevel, score, stars);

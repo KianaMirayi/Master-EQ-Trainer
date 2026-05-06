@@ -48,6 +48,7 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
 interface GameViewProps {
   level: number;
   selectedTrackId: string;
+  isTestMode?: boolean;
   onLevelComplete: (score: number, stars: number) => void;
   onRetry: (score: number, stars: number) => void;
   onBack: () => void;
@@ -193,7 +194,7 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
   );
 }
 
-export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onBack, onLevelChange }: GameViewProps) {
+export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, onRetry, onBack, onLevelChange }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [targetNodes, setTargetNodes] = useState<EQNodeData[]>([]);
@@ -547,21 +548,23 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       const gainErrAvg = userNodes.length > 0 ? gainError / userNodes.length : 0;
       const userQAvg = userNodes.length > 0 ? totalQ / userNodes.length : 0;
 
-      const newStats = {
-        ...currentStats,
-        levelsPlayed: currentStats.levelsPlayed + 1,
-        levelsCompleted: report.stars >= 1 ? currentStats.levelsCompleted + 1 : currentStats.levelsCompleted,
-        totalStars: currentStats.totalStars + report.stars,
-        totalTimeSpent: currentStats.totalTimeSpent + timeSpent,
-        totalFreqError: currentStats.totalFreqError + (firstFreqErrorRef.current || 0),
-        totalQError: currentStats.totalQError + qErrAvg,
-        totalGainError: currentStats.totalGainError + gainErrAvg,
-        extremeGainCount: currentStats.extremeGainCount + extremeGains,
-        totalUserQSum: currentStats.totalUserQSum + userQAvg,
-        totalSweepEvents: currentStats.totalSweepEvents + totalSweepEventsRef.current
-      };
-      
-      PlayerProfileManager.saveStats(newStats);
+      if (!isTestMode) {
+        const newStats = {
+          ...currentStats,
+          levelsPlayed: currentStats.levelsPlayed + 1,
+          levelsCompleted: report.stars >= 1 ? currentStats.levelsCompleted + 1 : currentStats.levelsCompleted,
+          totalStars: currentStats.totalStars + report.stars,
+          totalTimeSpent: currentStats.totalTimeSpent + timeSpent,
+          totalFreqError: currentStats.totalFreqError + (firstFreqErrorRef.current || 0),
+          totalQError: currentStats.totalQError + qErrAvg,
+          totalGainError: currentStats.totalGainError + gainErrAvg,
+          extremeGainCount: currentStats.extremeGainCount + extremeGains,
+          totalUserQSum: currentStats.totalUserQSum + userQAvg,
+          totalSweepEvents: currentStats.totalSweepEvents + totalSweepEventsRef.current
+        };
+        
+        PlayerProfileManager.saveStats(newStats);
+      }
 
     }, 1400);
   };
@@ -571,8 +574,10 @@ export function GameView({ level, selectedTrackId, onLevelComplete, onRetry, onB
       if (scoreReport.stars >= 1) { // 1 star is passing
         onLevelComplete(scoreReport.totalScore, scoreReport.stars);
       } else {
-        const stats = PlayerProfileManager.loadStats();
-        PlayerProfileManager.saveStats({ ...stats, retriesCount: stats.retriesCount + 1 });
+        if (!isTestMode) {
+           const stats = PlayerProfileManager.loadStats();
+           PlayerProfileManager.saveStats({ ...stats, retriesCount: stats.retriesCount + 1 });
+        }
         onRetry(scoreReport.totalScore, scoreReport.stars);
         setRetryTrigger(r => r + 1);
       }
