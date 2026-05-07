@@ -498,7 +498,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
-      setDimensions({ width, height });
+      setDimensions({ width: Math.floor(width), height: Math.floor(height) });
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
@@ -1334,9 +1334,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       className={cn("relative w-full h-full overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
       style={{ 
         backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)',
-        contain: 'paint',
         transform: 'translateZ(0)', // Force separate layer for Safari
-        WebkitTransform: 'translateZ(0)'
+        WebkitTransform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden'
       }}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
@@ -1392,8 +1393,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           <div
             key={node.id}
             style={{ 
-              transform: `translate3d(${xPos}px, ${yPos}px, 0) translate(-50%, -50%)`,
-              WebkitTransform: `translate3d(${xPos}px, ${yPos}px, 0) translate(-50%, -50%)`,
+              transform: `translate3d(${Math.round(xPos)}px, ${Math.round(yPos)}px, 0) translate(-50%, -50%)`,
+              WebkitTransform: `translate3d(${Math.round(xPos)}px, ${Math.round(yPos)}px, 0) translate(-50%, -50%)`,
               willChange: 'transform',
               backfaceVisibility: 'hidden',
               WebkitBackfaceVisibility: 'hidden',

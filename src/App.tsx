@@ -39,6 +39,7 @@ export default function App() {
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
@@ -178,7 +179,11 @@ export default function App() {
       const stats = PlayerProfileManager.loadStats();
       const records = ProgressionManager.getRecords();
       const presets = CalibrationManager.getPresets();
-      await FirebaseService.syncUserData(stats, records, presets);
+      try {
+        await FirebaseService.syncUserData(stats, records, presets);
+      } catch (err) {
+        console.error("Critical: Leaderboard sync failed:", err);
+      }
     }
   };
 
@@ -651,9 +656,23 @@ export default function App() {
                 </>
               )}
             </h2>
-            <button onClick={() => { setIsSettingsOpen(false); setTimeout(() => setSettingsView('main'), 300); }} className="text-slate-400 hover:text-slate-200 transition">
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {settingsView === 'main' && (
+                <button 
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    handleLevelSelect(1, true);
+                  }}
+                  className="p-2 text-slate-500 hover:text-cyan-400 transition rounded-lg hover:bg-slate-800"
+                  title={t('enter_test_mode')}
+                >
+                  <Bug className="w-5 h-5" />
+                </button>
+              )}
+              <button onClick={() => { setIsSettingsOpen(false); setTimeout(() => setSettingsView('main'), 300); }} className="text-slate-400 hover:text-slate-200 transition p-2">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
           
           <div className="p-6 flex-1 overflow-y-auto">
@@ -712,32 +731,6 @@ export default function App() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
                 </button>
-
-                {/* About & Proclaim */}
-                <div className="mt-8 pt-6 border-t border-slate-800/50 space-y-4">
-                  <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-slate-600">
-                    <span>Acoustic Mastery Lab</span>
-                    <span>v1.2.0</span>
-                  </div>
-                  <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
-                    <p className="text-[11px] text-slate-500 leading-relaxed italic">
-                      {t('about_disclaimer')}
-                    </p>
-                  </div>
-                  
-                  {/* Support/Donation Section */}
-                  <div className="flex flex-col gap-2">
-                    <button 
-                      onClick={() => alert(`Thank you for your interest! Support this project via USDT (TRC20): TYourAddressGoesHere\nOr visit our Ko-fi page.`)}
-                      className="w-full py-2.5 bg-gradient-to-r from-amber-500/5 to-amber-500/10 hover:from-amber-500/10 hover:to-amber-500/20 border border-amber-500/20 rounded-lg text-amber-500/80 text-[10px] uppercase font-bold tracking-widest transition-all"
-                    >
-                      {t('support_project')}
-                    </button>
-                    <div className="text-[10px] text-center text-slate-500 opacity-30 hover:opacity-100 transition-opacity cursor-default">
-                      Keep the bits flowing. Stay focused.
-                    </div>
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="space-y-6">
@@ -872,20 +865,71 @@ export default function App() {
             )}
           </div>
           {settingsView === 'main' && (
-            <div className="p-6 border-t border-slate-800 bg-slate-900 mt-auto">
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-slate-400">{t('test_env')}</span>
-                <button 
-                  onClick={() => {
-                    setIsSettingsOpen(false);
-                    handleLevelSelect(1, true);
-                  }}
-                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 text-sm font-bold rounded-lg transition-colors border border-slate-700 flex items-center justify-center gap-2"
-                >
-                  <Bug className="w-4 h-4" />
-                  {t('enter_test_mode')}
-                </button>
-              </div>
+            <div className="p-6 border-t border-slate-800 bg-slate-900/50">
+              <AnimatePresence mode="wait">
+                {isSupportOpen ? (
+                  <motion.div 
+                    key="support-msg"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="space-y-4"
+                  >
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 text-center flex flex-col items-center gap-4">
+                       <div className="text-2xl">🧋</div>
+                       <p className="text-xs text-amber-200/90 leading-relaxed font-medium">
+                         {t('support_message')}
+                       </p>
+                       <div className="bg-white p-1.5 rounded-lg shadow-xl shadow-amber-500/10">
+                         <img 
+                           src="/assets/donations/wechat_qr.png" 
+                           alt="WeChat Support" 
+                           className="w-32 h-32 object-contain rounded-sm"
+                           referrerPolicy="no-referrer"
+                         />
+                       </div>
+                    </div>
+                    <button 
+                      onClick={() => setIsSupportOpen(false)}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[10px] uppercase font-bold tracking-widest rounded-lg transition-all border border-slate-700 active:scale-95"
+                    >
+                      {t('back_game')}
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="standard-footer"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="space-y-4"
+                  >
+                    <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-slate-600">
+                      <span>Acoustic Mastery Lab</span>
+                      <span>v1.2.0</span>
+                    </div>
+                    <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
+                      <p className="text-[11px] text-slate-500 leading-relaxed italic">
+                        {t('about_disclaimer')}
+                      </p>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      <div className="flex justify-center">
+                        <button 
+                          onClick={() => setIsSupportOpen(true)}
+                          className="px-6 py-1.5 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-500/80 text-[10px] uppercase font-bold tracking-widest transition-all active:scale-95"
+                        >
+                          {t('support_project')}
+                        </button>
+                      </div>
+                      <div className="text-[9px] text-center text-slate-600 opacity-50 italic">
+                        Keep the bits flowing. Stay focused.
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>

@@ -11,14 +11,27 @@ import { WaveformPlayer } from './WaveformPlayer';
 import { TrackManager, Track } from '../lib/TrackManager';
 import { PlayerProfileManager } from '../lib/PlayerProfileManager';
 
+const MAX_BUFFER_CACHE = 2;
 const bufferCache = new Map<string, Promise<AudioBuffer>>();
+const cacheKeys: string[] = [];
 
 import { useLanguage } from '../lib/LanguageContext';
 
 const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuffer> => {
     if (bufferCache.has(track.id)) {
+        // Mark as recently used
+        const idx = cacheKeys.indexOf(track.id);
+        if (idx !== -1) cacheKeys.splice(idx, 1);
+        cacheKeys.push(track.id);
         return bufferCache.get(track.id)!;
     }
+
+    // Evict oldest if full
+    if (cacheKeys.length >= MAX_BUFFER_CACHE) {
+        const oldestKey = cacheKeys.shift();
+        if (oldestKey) bufferCache.delete(oldestKey);
+    }
+    cacheKeys.push(track.id);
 
     const promise = (async () => {
         let arrayBuffer;

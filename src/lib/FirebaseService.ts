@@ -102,7 +102,7 @@ export class FirebaseService {
     const userDocRef = doc(db, 'users', user.uid);
     const scoreDocRef = doc(db, 'leaderboard', user.uid);
 
-    const masteryScore = stats.totalStars;
+    const masteryScore = (Object.values(records) as any[]).reduce((sum: number, r: any) => sum + (r.score || 0), 0);
     const ami = this.calculateAMI(stats);
     
     // Calculate radar components for leaderboard

@@ -71,7 +71,7 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && (
         // Allow full sync
-        (isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['stats', 'updatedAt', 'displayName', 'photoURL', 'records', 'email', 'calibrationPresets'])) ||
+        (isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'stats', 'updatedAt', 'displayName', 'photoURL', 'records', 'email', 'calibrationPresets'])) ||
         // Allow partial update (e.g. from updateCalibrationPresets)
         (incoming().diff(existing()).affectedKeys().hasOnly(['calibrationPresets', 'updatedAt']))
       );
@@ -82,7 +82,7 @@ service cloud.firestore {
       allow get, list: if true;
       allow create: if isOwner(userId) && isValidScore(incoming());
       allow update: if isOwner(userId) && isValidScore(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['masteryScore', 'ami', 'levelsCompleted', 'updatedAt', 'displayName', 'photoURL', 'radar'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'masteryScore', 'ami', 'levelsCompleted', 'updatedAt', 'displayName', 'photoURL', 'radar'])
       );
     }
   }
