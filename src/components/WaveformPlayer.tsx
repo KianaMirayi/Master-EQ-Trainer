@@ -26,6 +26,19 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   const [dragStartRatio, setDragStartRatio] = useState(0);
   const [draggingHandle, setDraggingHandle] = useState<'start' | 'end' | null>(null);
 
+  // Shared Resize Observer
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      if (entries[0]) {
+        setDimensions({ width: entries[0].contentRect.width, height: entries[0].contentRect.height });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   // Global Spacebar for play/pause
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,7 +79,10 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
     return () => cancelAnimationFrame(frameId);
   }, [engine]);
 
-  // Draw Waveform and Loop Overlay
+  // Refs for caching waveform path logic
+  const waveformPathRef = useRef<Path2D | null>(null);
+
+  // Draw Waveform (Static Only)
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current || !engine.buffer) return;
     const canvas = canvasRef.current;
@@ -74,48 +90,62 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
     if (!ctx) return;
 
     const width = containerRef.current.clientWidth;
-    const height = 64; // fixed height
-    canvas.width = width;
-    canvas.height = height;
+    const height = 64; 
+    
+    // Use high DPI for waveform if possible, but keep it simple
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
 
     const rawData = engine.buffer.getChannelData(0);
     const samples = rawData.length;
     const step = Math.ceil(samples / width);
 
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw waveform
-    ctx.beginPath();
-    ctx.moveTo(0, height / 2);
+    const path = new Path2D();
+    path.moveTo(0, height / 2);
+    
     for (let i = 0; i < width; i++) {
         let min = 1.0;
         let max = -1.0;
         for (let j = 0; j < step; j++) {
-            const datum = rawData[(i * step) + j];
+            const idx = (i * step) + j;
+            if (idx >= samples) break;
+            const datum = rawData[idx];
             if (datum < min) min = datum;
             if (datum > max) max = datum;
         }
-        ctx.lineTo(i, (1 + min) * (height / 2));
-        ctx.lineTo(i, (1 + max) * (height / 2));
+        path.lineTo(i, (1 + min) * (height / 2));
+        path.lineTo(i, (1 + max) * (height / 2));
     }
-    ctx.strokeStyle = '#3b82f6'; // blue-500
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    waveformPathRef.current = path;
+  }, [engine.buffer, dimensions.width]); // dimensions.width is derived from resize observer
 
-    // Draw playhead
-    const playheadX = (currentTime / (duration || 1)) * width;
-    ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  // Draw Loop Overlay & Playhead (Dynamic)
+  useEffect(() => {
+    if (!canvasRef.current || !containerRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = dimensions.width;
+    const height = 64;
+    if (width === 0) return;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw cached waveform
+    if (waveformPathRef.current) {
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 1;
+        ctx.stroke(waveformPathRef.current);
+    }
 
     // Draw Loop region
-    if (isLooping) {
-        const startX = (loopStart / (duration || 1)) * width;
-        const endX = (loopEnd / (duration || 1)) * width;
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)'; // sky-400 transparent
+    if (isLooping && duration > 0) {
+        const startX = (loopStart / duration) * width;
+        const endX = (loopEnd / duration) * width;
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
         ctx.fillRect(startX, 0, endX - startX, height);
         
         ctx.beginPath();
@@ -127,7 +157,18 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
         ctx.lineWidth = 2;
         ctx.stroke();
     }
-  }, [engine.buffer, currentTime, duration, loopStart, loopEnd, isLooping]);
+
+    // Draw playhead
+    if (duration > 0) {
+        const playheadX = (currentTime / duration) * width;
+        ctx.beginPath();
+        ctx.moveTo(playheadX, 0);
+        ctx.lineTo(playheadX, height);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+  }, [currentTime, isLooping, loopStart, loopEnd, duration, dimensions.width]);
 
   const togglePlay = () => {
       if (engine.isPlaying) {

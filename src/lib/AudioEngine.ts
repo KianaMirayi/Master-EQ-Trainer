@@ -23,6 +23,12 @@ export class AudioEngine {
   targetAnalyser: AnalyserNode;
   userAnalyser: AnalyserNode;
   masterAnalyser: AnalyserNode;
+  
+  // High performance pre-allocated buffers
+  private freqBuffer: Float32Array | null = null;
+  private magBuffer: Float32Array | null = null;
+  private phaseBuffer: Float32Array | null = null;
+  private levelBuffer: Float32Array | null = null;
 
   isPlaying = false;
   isLooping = true;
@@ -515,42 +521,46 @@ export class AudioEngine {
 
   getIndividualFrequencyResponses(isTarget: boolean, width: number): { outDb: Float32Array, midDb: Float32Array, sideDb: Float32Array }[] {
     const graph = isTarget ? this.targetGraph : this.userGraph;
-    const freqs = new Float32Array(width);
-    const minLog = Math.log10(MIN_FREQ);
-    const maxLog = Math.log10(MAX_FREQ);
-    for (let i = 0; i < width; i++) {
-        freqs[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
+    
+    // Ensure buffers are allocated and correctly sized
+    if (!this.freqBuffer || this.freqBuffer.length !== width) {
+      this.freqBuffer = new Float32Array(width);
+      this.magBuffer = new Float32Array(width);
+      this.phaseBuffer = new Float32Array(width);
+      
+      const minLog = Math.log10(MIN_FREQ);
+      const maxLog = Math.log10(MAX_FREQ);
+      for (let i = 0; i < width; i++) {
+        this.freqBuffer[i] = Math.pow(10, minLog + (i / (width - 1)) * (maxLog - minLog));
+      }
     }
 
     const responses: { outDb: Float32Array, midDb: Float32Array, sideDb: Float32Array }[] = [];
     
     if (graph && graph.midFilters.length > 0) {
       for (let i = 0; i < graph.midFilters.length; i++) {
-          const midF = graph.midFilters[i];
-          const sideF = graph.sideFilters[i];
+        const midF = graph.midFilters[i];
+        const sideF = graph.sideFilters[i];
 
-          const midMag = new Float32Array(width);
-          const midPhase = new Float32Array(width);
-          midF.getFrequencyResponse(freqs, midMag, midPhase);
+        midF.getFrequencyResponse(this.freqBuffer, this.magBuffer!, this.phaseBuffer!);
+        const midMagSnapshot = new Float32Array(this.magBuffer!);
+        
+        sideF.getFrequencyResponse(this.freqBuffer, this.magBuffer!, this.phaseBuffer!);
+        const sideMagSnapshot = new Float32Array(this.magBuffer!);
 
-          const sideMag = new Float32Array(width);
-          const sidePhase = new Float32Array(width);
-          sideF.getFrequencyResponse(freqs, sideMag, sidePhase);
-
-          const outDb = new Float32Array(width);
-          const midDb = new Float32Array(width);
-          const sideDb = new Float32Array(width);
-          
-          for(let j = 0; j < width; j++) {
-              let m = midMag[j];
-              let s = sideMag[j];
-              // Use the magnitude that deviates most from 0dB (1 linear)
-              let mag = Math.abs(1 - m) > Math.abs(1 - s) ? m : s;
-              outDb[j] = 20 * Math.log10(mag || 1);
-              midDb[j] = 20 * Math.log10(m || 1);
-              sideDb[j] = 20 * Math.log10(s || 1);
-          }
-          responses.push({ outDb, midDb, sideDb });
+        const outDb = new Float32Array(width);
+        const midDb = new Float32Array(width);
+        const sideDb = new Float32Array(width);
+        
+        for(let j = 0; j < width; j++) {
+            let m = midMagSnapshot[j];
+            let s = sideMagSnapshot[j];
+            let mag = Math.abs(1 - m) > Math.abs(1 - s) ? m : s;
+            outDb[j] = 20 * Math.log10(mag || 1);
+            midDb[j] = 20 * Math.log10(m || 1);
+            sideDb[j] = 20 * Math.log10(s || 1);
+        }
+        responses.push({ outDb, midDb, sideDb });
       }
     }
 
@@ -559,31 +569,34 @@ export class AudioEngine {
 
   getFrequencyResponse(isTarget: boolean, width: number): { mid: Float32Array, side: Float32Array } {
     const graph = isTarget ? this.targetGraph : this.userGraph;
-    const freqs = new Float32Array(width);
-    const minLog = Math.log10(MIN_FREQ);
-    const maxLog = Math.log10(MAX_FREQ);
-    for (let i = 0; i < width; i++) {
-        freqs[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
+    
+    if (!this.freqBuffer || this.freqBuffer.length !== width) {
+      this.freqBuffer = new Float32Array(width);
+      this.magBuffer = new Float32Array(width);
+      this.phaseBuffer = new Float32Array(width);
+      
+      const minLog = Math.log10(MIN_FREQ);
+      const maxLog = Math.log10(MAX_FREQ);
+      for (let i = 0; i < width; i++) {
+          this.freqBuffer[i] = Math.pow(10, minLog + (i / (width-1)) * (maxLog - minLog));
+      }
     }
 
     const midTotalMag = new Float32Array(width).fill(1);
     const sideTotalMag = new Float32Array(width).fill(1);
     
     if (graph) {
-      const mag = new Float32Array(width);
-      const phase = new Float32Array(width);
-      
       graph.midFilters.forEach(f => {
-          f.getFrequencyResponse(freqs, mag, phase);
+          f.getFrequencyResponse(this.freqBuffer!, this.magBuffer!, this.phaseBuffer!);
           for(let i = 0; i < width; i++) {
-              midTotalMag[i] *= mag[i];
+              midTotalMag[i] *= this.magBuffer![i];
           }
       });
 
       graph.sideFilters.forEach(f => {
-          f.getFrequencyResponse(freqs, mag, phase);
+          f.getFrequencyResponse(this.freqBuffer!, this.magBuffer!, this.phaseBuffer!);
           for(let i = 0; i < width; i++) {
-              sideTotalMag[i] *= mag[i];
+              sideTotalMag[i] *= this.magBuffer![i];
           }
       });
     }
@@ -599,18 +612,21 @@ export class AudioEngine {
 
   getMasterLevel(): { rms: number, peak: number } {
     if (!this.isPlaying) return { rms: -100, peak: -100 };
-    const data = new Float32Array(this.masterAnalyser.fftSize);
-    this.masterAnalyser.getFloatTimeDomainData(data);
+    const fftSize = this.masterAnalyser.fftSize;
+    if (!this.levelBuffer || this.levelBuffer.length !== fftSize) {
+      this.levelBuffer = new Float32Array(fftSize);
+    }
+    this.masterAnalyser.getFloatTimeDomainData(this.levelBuffer);
     
     let sum = 0;
     let peak = 0;
-    for (let i = 0; i < data.length; i++) {
-        const val = data[i];
+    for (let i = 0; i < fftSize; i++) {
+        const val = this.levelBuffer[i];
         sum += val * val;
         if (Math.abs(val) > peak) peak = Math.abs(val);
     }
     
-    const rms = Math.sqrt(sum / data.length);
+    const rms = Math.sqrt(sum / fftSize);
     
     return {
         rms: rms > 0 ? 20 * Math.log10(rms) : -100,

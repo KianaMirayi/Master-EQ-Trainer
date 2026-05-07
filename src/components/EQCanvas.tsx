@@ -458,20 +458,35 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   const specRawPointsRef = useRef<Float32Array | null>(null);
   const specDilatedPointsRef = useRef<Float32Array | null>(null);
   const specSmoothedPointsRef = useRef<Float32Array | null>(null);
+  
+  // Reusable FFT buffers to avoid GC pressure
+  const targetFftBufferRef = useRef<Float32Array | null>(null);
+  const userFftBufferRef = useRef<Float32Array | null>(null);
 
   // References for temporal envelope smoothing
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
 
   // References for caching EQ Curves to avoid calculating every frame
-  const cachedTargetResponse = useRef<{ width: number, nodesStr: string, mid: Float32Array, side: Float32Array }>({ width: 0, nodesStr: '', mid: new Float32Array(), side: new Float32Array() });
-  const cachedUserResponse = useRef<{ width: number, nodesStr: string, mid: Float32Array, side: Float32Array }>({ width: 0, nodesStr: '', mid: new Float32Array(), side: new Float32Array() });
-  const cachedIndividualResponses = useRef<{ width: number, nodesStr: string, resps: any[] }>({ width: 0, nodesStr: '', resps: [] });
+  // We use versioning instead of JSON.stringify for performance
+  const targetNodesVersion = useRef(0);
+  const userNodesVersion = useRef(0);
+  const lastDrawnTargetNodesStr = useRef('');
+  const lastDrawnUserNodesStr = useRef('');
+  
+  const cachedTargetResponse = useRef<{ width: number, version: number, mid: Float32Array, side: Float32Array }>({ width: 0, version: -1, mid: new Float32Array(), side: new Float32Array() });
+  const cachedUserResponse = useRef<{ width: number, version: number, mid: Float32Array, side: Float32Array }>({ width: 0, version: -1, mid: new Float32Array(), side: new Float32Array() });
+  const cachedIndividualResponses = useRef<{ width: number, version: number, resps: any[] }>({ width: 0, version: -1, resps: [] });
 
   const userNodesRef = useRef(userNodes);
   useEffect(() => {
     userNodesRef.current = userNodes;
+    userNodesVersion.current++;
   }, [userNodes]);
+
+  useEffect(() => {
+    targetNodesVersion.current++;
+  }, [targetNodes]);
 
   const listeningNodeIdxRef = useRef(listeningNodeIdx);
   useEffect(() => {
@@ -799,16 +814,20 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
       if (showTarget && targetNodes) {
         const targetBinCount = engine.targetAnalyser.frequencyBinCount;
-        const targetFftData = new Float32Array(targetBinCount);
-        engine.targetAnalyser.getFloatFrequencyData(targetFftData);
-        drawSpectrum(targetFftData, TARGET_SPECTRUM_FILL_COLOR, targetEnvelopeRef, TARGET_SPECTRUM_STROKE_COLOR);
+        if (!targetFftBufferRef.current || targetFftBufferRef.current.length !== targetBinCount) {
+          targetFftBufferRef.current = new Float32Array(targetBinCount);
+        }
+        engine.targetAnalyser.getFloatFrequencyData(targetFftBufferRef.current);
+        drawSpectrum(targetFftBufferRef.current, TARGET_SPECTRUM_FILL_COLOR, targetEnvelopeRef, TARGET_SPECTRUM_STROKE_COLOR);
       }
       
       // User Spectrum
       const userBinCount = engine.userAnalyser.frequencyBinCount;
-      const userFftData = new Float32Array(userBinCount);
-      engine.userAnalyser.getFloatFrequencyData(userFftData);
-      drawSpectrum(userFftData, USER_SPECTRUM_FILL_COLOR, userEnvelopeRef, USER_SPECTRUM_STROKE_COLOR);
+      if (!userFftBufferRef.current || userFftBufferRef.current.length !== userBinCount) {
+        userFftBufferRef.current = new Float32Array(userBinCount);
+      }
+      engine.userAnalyser.getFloatFrequencyData(userFftBufferRef.current);
+      drawSpectrum(userFftBufferRef.current, USER_SPECTRUM_FILL_COLOR, userEnvelopeRef, USER_SPECTRUM_STROKE_COLOR);
 
       if (dimLevel > 0) {
           ctx.fillStyle = `rgba(11, 12, 16, ${dimLevel})`;
@@ -818,17 +837,15 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       // Helper to get or update cached responses
       const getCachedResponse = (isTarget: boolean) => {
           if (isTarget) {
-              const currentStr = JSON.stringify(targetNodes);
-              if (cachedTargetResponse.current.width !== dimensions.width || cachedTargetResponse.current.nodesStr !== currentStr) {
+              if (cachedTargetResponse.current.width !== dimensions.width || cachedTargetResponse.current.version !== targetNodesVersion.current) {
                   const res = engine.getFrequencyResponse(true, dimensions.width);
-                  cachedTargetResponse.current = { width: dimensions.width, nodesStr: currentStr, mid: res.mid, side: res.side };
+                  cachedTargetResponse.current = { width: dimensions.width, version: targetNodesVersion.current, mid: res.mid, side: res.side };
               }
               return cachedTargetResponse.current;
           } else {
-              const currentStr = JSON.stringify(userNodesRef.current);
-              if (cachedUserResponse.current.width !== dimensions.width || cachedUserResponse.current.nodesStr !== currentStr) {
+              if (cachedUserResponse.current.width !== dimensions.width || cachedUserResponse.current.version !== userNodesVersion.current) {
                   const res = engine.getFrequencyResponse(false, dimensions.width);
-                  cachedUserResponse.current = { width: dimensions.width, nodesStr: currentStr, mid: res.mid, side: res.side };
+                  cachedUserResponse.current = { width: dimensions.width, version: userNodesVersion.current, mid: res.mid, side: res.side };
               }
               return cachedUserResponse.current;
           }
@@ -1007,11 +1024,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
         // --- LAYER 2: Selected Node Active Fill ---
         if (!isTarget && fillHoverNodeIdx !== null && latestNodes.length > 0) {
-            const currentStr = JSON.stringify(userNodesRef.current);
-            if (cachedIndividualResponses.current.width !== dimensions.width || cachedIndividualResponses.current.nodesStr !== currentStr) {
+            if (cachedIndividualResponses.current.width !== dimensions.width || cachedIndividualResponses.current.version !== userNodesVersion.current) {
                 cachedIndividualResponses.current = {
                     width: dimensions.width,
-                    nodesStr: currentStr,
+                    version: userNodesVersion.current,
                     resps: engine.getIndividualFrequencyResponses(false, dimensions.width)
                 };
             }

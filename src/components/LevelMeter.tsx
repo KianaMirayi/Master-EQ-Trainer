@@ -32,8 +32,10 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
       width = entries[0].contentRect.width;
       height = entries[0].contentRect.height;
       if (canvasRef.current) {
-         canvasRef.current.width = width;
-         canvasRef.current.height = height;
+         const dpr = window.devicePixelRatio || 1;
+         canvasRef.current.width = width * dpr;
+         canvasRef.current.height = height * dpr;
+         ctx.scale(dpr, dpr);
       }
     });
     observer.observe(containerRef.current);
