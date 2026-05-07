@@ -3,6 +3,9 @@ import {
   User as FirebaseUser, 
   signOut
 } from 'firebase/auth';
+
+export type { FirebaseUser };
+
 import { 
   doc, 
   setDoc, 
@@ -16,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, signInWithGoogle, signInWithEmailAndPassword, sendPasswordResetEmail } from './firebase';
 import { PlayerStats } from './PlayerProfileManager';
+import { CalibrationPreset } from './CalibrationManager';
 
 export interface LeaderboardEntry {
   uid: string;
@@ -78,7 +82,8 @@ export class FirebaseService {
       // 同时更新 Firestore
       const stats = (await import('./PlayerProfileManager')).PlayerProfileManager.loadStats();
       const records = (await import('./ProgressionManager')).ProgressionManager.getRecords();
-      await this.syncUserData(stats, records);
+      const presets = (await import('./CalibrationManager')).CalibrationManager.getPresets();
+      await this.syncUserData(stats, records, presets);
     }
   }
 
@@ -90,7 +95,7 @@ export class FirebaseService {
     await signOut(auth);
   }
 
-  static async syncUserData(stats: PlayerStats, records: any) {
+  static async syncUserData(stats: PlayerStats, records: any, presets: CalibrationPreset[]) {
     const user = auth.currentUser;
     if (!user) return;
 
@@ -118,6 +123,7 @@ export class FirebaseService {
       photoURL: user.photoURL,
       stats: stats,
       records: records,
+      calibrationPresets: presets,
       updatedAt: serverTimestamp(),
     };
 
@@ -139,6 +145,21 @@ export class FirebaseService {
       ]);
     } catch (error) {
       console.error('Error syncing user data to Firebase', error);
+    }
+  }
+
+  static async updateCalibrationPresets(presets: CalibrationPreset[]) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const userDocRef = doc(db, 'users', user.uid);
+    try {
+      await setDoc(userDocRef, { 
+        calibrationPresets: presets,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error updating calibration presets to Firebase', error);
     }
   }
 

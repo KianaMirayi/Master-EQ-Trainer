@@ -4,6 +4,7 @@ import { EQNodeData } from '../lib/utils';
 import { EQCanvas } from './EQCanvas';
 import { AudioEngine } from '../lib/AudioEngine';
 import { TrackManager, Track } from '../lib/TrackManager';
+import { FirebaseService } from '../lib/FirebaseService';
 import { ArrowLeft, Play, Square, Headphones, Settings, Plus, Save, Trash2, Volume2, Power } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -14,7 +15,9 @@ export function CalibrationSettings({ onBack }: { onBack: () => void }) {
 
   const handleSave = (preset: CalibrationPreset) => {
     CalibrationManager.savePreset(preset);
-    setPresets(CalibrationManager.getPresets());
+    const allPresets = CalibrationManager.getPresets();
+    setPresets(allPresets);
+    FirebaseService.updateCalibrationPresets(allPresets);
   };
 
   const handleCreate = () => {
@@ -35,9 +38,11 @@ export function CalibrationSettings({ onBack }: { onBack: () => void }) {
 
   const handleDelete = (id: string) => {
     CalibrationManager.deletePreset(id);
-    setPresets(CalibrationManager.getPresets());
+    const allPresets = CalibrationManager.getPresets();
+    setPresets(allPresets);
     setActiveId(CalibrationManager.getActivePresetId());
     if (editingPreset?.id === id) setEditingPreset(null);
+    FirebaseService.updateCalibrationPresets(allPresets);
   };
 
   const handleSetActive = (id: string | null) => {

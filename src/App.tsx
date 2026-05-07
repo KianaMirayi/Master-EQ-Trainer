@@ -13,6 +13,7 @@ import { LoginModal } from './components/LoginModal';
 
 import { UserProfileDashboard } from './components/UserProfileDashboard';
 import { PlayerProfileManager } from './lib/PlayerProfileManager';
+import { CalibrationManager } from './lib/CalibrationManager';
 import { FirebaseService } from './lib/FirebaseService';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -21,7 +22,10 @@ interface LevelScore {
   score: number;
 }
 
+import { useLanguage } from './lib/LanguageContext';
+
 export default function App() {
+  const { t, language, setLanguage } = useLanguage();
   const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile'>('dashboard');
   const [dashboardMode, setDashboardMode] = useState<'grid' | 'carousel'>('carousel');
   const [activeLevel, setActiveLevel] = useState<number>(1);
@@ -58,6 +62,15 @@ export default function App() {
             ProgressionManager.mergeRecords(cloudData.records);
             setRecords(ProgressionManager.getRecords());
           }
+          if (cloudData.calibrationPresets) {
+            CalibrationManager.mergePresets(cloudData.calibrationPresets);
+          }
+          
+          // Re-sync back to cloud to ensure any local-only data is preserved and cloud is updated with combined state
+          const updatedStats = PlayerProfileManager.loadStats();
+          const updatedRecords = ProgressionManager.getRecords();
+          const updatedPresets = CalibrationManager.getPresets();
+          await FirebaseService.syncUserData(updatedStats, updatedRecords, updatedPresets);
         }
       }
     });
@@ -164,7 +177,8 @@ export default function App() {
     if (user) {
       const stats = PlayerProfileManager.loadStats();
       const records = ProgressionManager.getRecords();
-      await FirebaseService.syncUserData(stats, records);
+      const presets = CalibrationManager.getPresets();
+      await FirebaseService.syncUserData(stats, records, presets);
     }
   };
 
@@ -430,10 +444,10 @@ export default function App() {
               <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)]">
                 <Headphones className="w-6 h-6 text-slate-900" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-white">EQ Web Trainer</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-white">{t('app_name')}</h1>
             </div>
             <p className="text-slate-400 max-w-md">
-              Train your ears to recognize frequency bands and EQ matching. 
+              {t('app_tagline')}
             </p>
           </div>
           
@@ -444,12 +458,12 @@ export default function App() {
               title="View Leaderboards"
             >
               <div className="px-4 py-2 flex flex-col items-center">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Mastery</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{t('mastery_score')}</span>
                 <span className="text-xl font-mono font-bold text-cyan-400">{masteryScore}</span>
               </div>
               <div className="w-px h-8 bg-slate-800"></div>
               <div className="px-4 py-2 flex flex-col items-center">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">AMI Score</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{t('acoustic_index')}</span>
                 <span className="text-xl font-mono font-bold text-emerald-400">{user ? "9500" : "-"}</span> 
               </div>
             </button>
@@ -622,7 +636,7 @@ export default function App() {
               {settingsView === 'main' ? (
                 <>
                   <Settings className="w-5 h-5 text-cyan-400"/>
-                  Settings
+                  {t('settings')}
                 </>
               ) : (
                 <>
@@ -644,7 +658,26 @@ export default function App() {
           
           <div className="p-6 flex-1 overflow-y-auto">
             {settingsView === 'main' ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* Language Switcher */}
+                <div className="bg-slate-950/50 p-1.5 rounded-xl border border-slate-800 flex gap-1 mb-2">
+                  {[
+                    { id: 'en', name: 'English' },
+                    { id: 'zh', name: '中文' }
+                  ].map(lang => (
+                    <button
+                      key={lang.id}
+                      onClick={() => setLanguage(lang.id as any)}
+                      className={cn(
+                        "flex-1 py-2 text-[10px] uppercase font-black tracking-widest rounded-lg transition-all",
+                        language === lang.id ? "bg-slate-800 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]" : "text-slate-600 hover:text-slate-400"
+                      )}
+                    >
+                      {lang.name}
+                    </button>
+                  ))}
+                </div>
+
                 <button 
                   onClick={() => setSettingsView('audio')}
                   className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors text-left group"
@@ -674,11 +707,37 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="font-medium text-slate-200">Headphone Calibration</h3>
-                      <p className="text-sm text-slate-400 mt-0.5">Counteract headphone coloration with global EQ profiles</p>
+                      <p className="text-sm text-slate-400 mt-0.5">Counteract headphone coloration</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
                 </button>
+
+                {/* About & Proclaim */}
+                <div className="mt-8 pt-6 border-t border-slate-800/50 space-y-4">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-slate-600">
+                    <span>Acoustic Mastery Lab</span>
+                    <span>v1.2.0</span>
+                  </div>
+                  <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
+                    <p className="text-[11px] text-slate-500 leading-relaxed italic">
+                      This application is intended for educational purposes. We are not liable for any auditory fatigue or damage due to excessive playback levels. Always listen responsibly.
+                    </p>
+                  </div>
+                  
+                  {/* Support/Donation Section */}
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={() => alert(`Thank you for your interest! Support this project via USDT (TRC20): TYourAddressGoesHere\nOr visit our Ko-fi page.`)}
+                      className="w-full py-2.5 bg-gradient-to-r from-amber-500/5 to-amber-500/10 hover:from-amber-500/10 hover:to-amber-500/20 border border-amber-500/20 rounded-lg text-amber-500/80 text-[10px] uppercase font-bold tracking-widest transition-all"
+                    >
+                      Support Developmental Efforts
+                    </button>
+                    <div className="text-[10px] text-center text-slate-500 opacity-30 hover:opacity-100 transition-opacity cursor-default">
+                      Keep the bits flowing. Stay focused.
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">

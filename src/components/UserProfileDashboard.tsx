@@ -4,8 +4,9 @@ import { PlayerProfileManager, PlayerStats } from '../lib/PlayerProfileManager';
 import { Trophy, Activity, Target, User, CloudUpload, ShieldCheck, ShieldAlert, Edit2, Check, X as CloseIcon, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FirebaseService } from '../lib/FirebaseService';
-import { User as FirebaseUser } from 'firebase/auth';
+import { FirebaseUser } from '../lib/FirebaseService';
 import { cn } from '../lib/utils';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface Props {
   stats: PlayerStats;
@@ -14,8 +15,6 @@ interface Props {
 }
 
 const CustomTick = ({ payload, x, y, textAnchor, stroke, radius, radarData }: any) => {
-  const parts = payload.value.split('\n');
-  const [zh, en] = parts;
   const dataNode = radarData.find((d: any) => d.subject === payload.value);
   const score = dataNode?.A ?? 0;
   const desc = dataNode?.desc ?? '';
@@ -30,18 +29,18 @@ const CustomTick = ({ payload, x, y, textAnchor, stroke, radius, radarData }: an
         textAnchor={textAnchor}
         fill="#94a3b8"
       >
-        <tspan x={x} dy="0em" fontSize={11}>{zh}</tspan>
-        <tspan x={x} dy="1.2em" fontSize={10} fill="#64748b">{en}</tspan>
-        <tspan x={x} dy="1.4em" fontSize={14} fill="#c7d2fe" fontWeight="bold">{score}</tspan>
+        <tspan x={x} dy="0em" fontSize={11} fontWeight="bold">{payload.value}</tspan>
+        <tspan x={x} dy="1.4em" fontSize={14} fill="#c7d2fe" fontWeight="black">{score}</tspan>
       </text>
     </g>
   );
 };
 
 export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
-  const radarData = useMemo(() => PlayerProfileManager.calculateRadarMap(stats), [stats]);
-  const personas = useMemo(() => PlayerProfileManager.getPersonas(stats), [stats]);
-  const achievements = useMemo(() => PlayerProfileManager.getAchievements(stats), [stats]);
+  const { t } = useLanguage();
+  const radarData = useMemo(() => PlayerProfileManager.calculateRadarMap(stats, t), [stats, t]);
+  const personas = useMemo(() => PlayerProfileManager.getPersonas(stats, t), [stats, t]);
+  const achievements = useMemo(() => PlayerProfileManager.getAchievements(stats, t), [stats, t]);
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(user?.displayName || '');
@@ -105,9 +104,9 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
       <div className="flex-1 min-w-[300px] bg-slate-900/50 border border-slate-800 rounded-2xl relative overflow-hidden backdrop-blur-md p-6 flex flex-col items-center">
         <h2 className="text-xl font-bold tracking-tight mb-2 flex items-center gap-2">
           <Activity className="w-5 h-5 text-indigo-400" />
-          能力评测雷达图 (Hexagon Profile)
+          {t('radar_title')}
         </h2>
-        <p className="text-sm text-slate-400 mb-6 text-center max-w-sm">基于你过往的闯关记录生成的能力模型</p>
+        <p className="text-sm text-slate-400 mb-6 text-center max-w-sm">{t('radar_desc')}</p>
         
         <div className="w-full h-[400px]" style={{ minWidth: 1, minHeight: 1 }}>
           <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
@@ -139,12 +138,12 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
         <div className="flex gap-4 mt-4 w-full justify-center">
           <div className="flex flex-col items-center">
             <span className="text-3xl font-black text-indigo-400">{stats.levelsCompleted}</span>
-            <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">通关数</span>
+            <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">{t('unlocked_levels')}</span>
           </div>
           <div className="h-10 w-px bg-slate-800" />
           <div className="flex flex-col items-center">
             <span className="text-3xl font-black text-amber-400">{stats.totalStars}</span>
-            <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">总星数</span>
+            <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">{t('total_stars')}</span>
           </div>
         </div>
       </div>
@@ -157,14 +156,14 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold flex items-center gap-2">
               <CloudUpload className="w-4 h-4 text-cyan-400" />
-              UserProfile & Sync
+              {t('user_profile')}
             </h2>
             {isLoggedIn && (
                <button 
                 onClick={onLoginToggle}
                 className="text-xs text-slate-500 hover:text-red-400 font-bold transition-colors"
               >
-                Sign Out
+                {t('sign_out')}
               </button>
             )}
           </div>
@@ -201,7 +200,7 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
                       </div>
                     ) : (
                       <>
-                        <span className="font-bold text-slate-200 truncate">{user?.displayName || 'Anonymous Player'}</span>
+                        <span className="font-bold text-slate-200 truncate">{user?.displayName || t('anonymous_player')}</span>
                         <button 
                           onClick={() => {
                             setNewName(user?.displayName || '');
@@ -225,14 +224,14 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
                   <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
                     <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <div className="text-xs font-bold text-amber-200 mb-1">Email not verified</div>
+                      <div className="text-xs font-bold text-amber-200 mb-1">{t('not_verified')}</div>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={handleSendVerification}
                           disabled={isVerifying || verificationSent}
                           className="text-[10px] font-bold text-amber-500 hover:text-amber-400 underline disabled:opacity-50"
                         >
-                          {verificationSent ? 'Sent!' : 'Verify Now'}
+                          {verificationSent ? t('sent') : t('verify_now')}
                         </button>
                         <span className="text-[10px] text-slate-600">|</span>
                         <button 
@@ -240,7 +239,7 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
                           className="text-[10px] font-bold text-slate-500 hover:text-slate-400 flex items-center gap-1"
                         >
                           <RefreshCw className={cn("w-2 h-2", isVerifying && "animate-spin")} />
-                          Refresh
+                          {t('refresh')}
                         </button>
                       </div>
                       {verificationError && (
@@ -255,28 +254,28 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
                 {user?.emailVerified && (
                   <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-tighter">Verified Account</span>
+                    <span className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-tighter">{t('verified_account')}</span>
                   </div>
                 )}
 
                 {/* Data Sync Status */}
                 <div className="text-[10px] text-slate-500 flex items-center gap-2 px-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Cloud synchronization active
+                  {t('sync_active')}
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-400 leading-relaxed">
-                Sign in to sync your progress across devices and join the global leaderboard.
+                {t('sign_in_desc')}
               </p>
               <button 
                 onClick={onLoginToggle}
                 className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95"
               >
                 <User className="w-4 h-4" />
-                Sign In / Sign Up
+                {t('sign_in_up')}
               </button>
             </div>
           )}
@@ -286,11 +285,11 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <Target className="w-4 h-4 text-emerald-400" />
-            操作偏好与画像
+            {t('persona_title')}
           </h2>
           {personas.length === 0 ? (
             <div className="py-6 text-center text-sm text-slate-500">
-              数据不足以生成画像，请多完成几次调音闯关吧！
+              {t('persona_empty')}
             </div>
           ) : (
             <div className="flex flex-col gap-3 max-h-56 overflow-y-auto custom-scrollbar pr-2">
@@ -317,11 +316,11 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md flex-1">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <Trophy className="w-4 h-4 text-amber-400" />
-            职业生涯成就
+            {t('achievement_title')}
           </h2>
           {achievements.length === 0 ? (
              <div className="py-6 text-center text-sm text-slate-500">
-               还没有获得成就...
+               {t('achievement_empty')}
              </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto custom-scrollbar pr-2 pb-2">

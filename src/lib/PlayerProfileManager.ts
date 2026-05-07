@@ -98,14 +98,14 @@ export class PlayerProfileManager {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_STATS));
   }
 
-  static calculateRadarMap(stats: PlayerStats) {
+  static calculateRadarMap(stats: PlayerStats, t?: (key: string) => string) {
     const radarData = [
-      { subject: '听音辨位\nPerception', A: 0, fullMark: 100, desc: '代表耳朵对频率的敏感度。初始放置节点的频率与目标频率的平均误差，误差越小，此项得分越高' },
-      { subject: '听觉精度\nPrecision', A: 0, fullMark: 100, desc: '代表最终调音的细腻程度。最终提交时的匹配度（通关星级/总得分的综合体现）' },
-      { subject: '决策效率\nEfficiency', A: 0, fullMark: 100, desc: '从进入关卡到点击 Submit 的平均耗时。时间越短得分越高' },
-      { subject: '空间感知\nSpatial', A: 0, fullMark: 100, desc: '对 Q值（带宽）的把控精度，以及未来如果有左右声道操作时的准确度' },
-      { subject: '稳定性\nConsistency', A: 0, fullMark: 100, desc: '连续获得高星评价的概率，以及重试（Retry）次数的少。（重试越少，越稳定）' },
-      { subject: '操作克制\nRestraint', A: 0, fullMark: 100, desc: '使用 Gain 增益的幅度。经常把 Gain 拉到极限或距离目标的增益太远会导致此项降低' },
+      { subject: t ? t('perception') : 'Perception', key: 'perception', A: 0, fullMark: 100, desc: t ? t('perception_desc') : '' },
+      { subject: t ? t('precision') : 'Precision', key: 'precision', A: 0, fullMark: 100, desc: t ? t('precision_desc') : '' },
+      { subject: t ? t('efficiency') : 'Efficiency', key: 'efficiency', A: 0, fullMark: 100, desc: t ? t('efficiency_desc') : '' },
+      { subject: t ? t('spatial') : 'Spatial', key: 'spatial', A: 0, fullMark: 100, desc: t ? t('spatial_desc') : '' },
+      { subject: t ? t('consistency') : 'Consistency', key: 'consistency', A: 0, fullMark: 100, desc: t ? t('consistency_desc') : '' },
+      { subject: t ? t('restraint') : 'Restraint', key: 'restraint', A: 0, fullMark: 100, desc: t ? t('restraint_desc') : '' },
     ];
     
     if (stats.levelsPlayed === 0) {
@@ -151,10 +151,11 @@ export class PlayerProfileManager {
     return radarData;
   }
 
-  static getPersonas(stats: PlayerStats) {
+  static getPersonas(stats: PlayerStats, t?: (key: string) => string) {
     if (stats.levelsPlayed < 1) return [];
 
     const personas = [];
+    const _t = t || ((k: string) => k);
     
     // 你可以利用上面暴露的参数进行任意二次计算，得出平均值或比率
     // === 以下是一些常用的衍生运算参考 ===
@@ -168,80 +169,81 @@ export class PlayerProfileManager {
     // 增加画像的方式： if (你的计算条件) { personas.push(...) }
 
     if (avgQ > 0 && avgQ < 1.2) {
-      personas.push({ icon: '🔪', title: '外科医生 (The Surgeon)', desc: '偏好极小的Q值，喜欢做精准的频段切除' });
+      personas.push({ icon: '🔪', title: _t('surgeon'), desc: _t('surgeon_desc') });
     } else if (avgQ > 3.0) {
-      personas.push({ icon: '🎨', title: '氛围大师 (The Broadcaster)', desc: '偏好极大Q值，喜欢做大范围的音色平移' });
+      personas.push({ icon: '🎨', title: _t('broadcaster'), desc: _t('broadcaster_desc') });
     }
 
     if (avgTime < 45) {
-      personas.push({ icon: '⚡', title: '极速狂飙 (Speed Demon)', desc: '决策效率极高，平均几十秒就提交，干脆利落' });
+      personas.push({ icon: '⚡', title: _t('speed_demon'), desc: _t('speed_demon_desc') });
     }
 
     if (sweepRatio > 200) {
-      personas.push({ icon: '🔬', title: '扫频狂魔 (Sweep Addict)', desc: '经常按住鼠标在各个频段来回滑动扫频' });
+      personas.push({ icon: '🔬', title: _t('sweep_addict'), desc: _t('sweep_addict_desc') });
     }
 
     if (extremeRatio >= 1.0) {
-      personas.push({ icon: '🧨', title: '破坏之王 (The Over-cooker)', desc: '偏好极致的增益，属于“下重手”调音' });
+      personas.push({ icon: '🧨', title: _t('over_cooker'), desc: _t('over_cooker_desc') });
     }
     
     if (personas.length === 0 && stats.levelsPlayed >= 1) {
-      personas.push({ icon: '⚖️', title: '中庸之道 (The Balanced)', desc: '操作非常均衡，没有过于极端的偏好' });
+      personas.push({ icon: '⚖️', title: _t('balanced'), desc: _t('balanced_desc') });
     }
 
     return personas;
   }
 
-  static getAchievements(stats: PlayerStats) {
+  static getAchievements(stats: PlayerStats, t?: (key: string) => string) {
     const ach = [];
+    const _t = t || ((k: string) => k);
     
     // 你可以直接访问 stats.XXX 原始数据进行数值判断
     // 也可以复用 stats.totalStars / stats.levelsPlayed 等二次计算的结果
     // 添加任何新成就只需要在此处补充一个 `if(条件) ach.push(...)` 即可
     
     if (stats.totalStars >= 3) {
-      ach.push({ icon: '🌟', title: '初试啼声', desc: '累计获得3颗星' });
+      ach.push({ icon: '🌟', title: _t('ach_3stars'), desc: _t('ach_3stars_desc') });
     }
     if (stats.totalStars >= 30) {
-      ach.push({ icon: '⭐', title: '金牌混音师', desc: '累计获得30颗星' });
+      ach.push({ icon: '⭐', title: _t('ach_30stars'), desc: _t('ach_30stars_desc') });
     }
     if (stats.totalStars >= 100) {
-      ach.push({ icon: '💎', title: '钻石铂金耳', desc: '累计获得100颗星' });
+      ach.push({ icon: '💎', title: _t('ach_100stars'), desc: _t('ach_100stars_desc') });
     }
     if (stats.totalStars >= 300) {
-      ach.push({ icon: '👑', title: '声学幻神', desc: '累计获得300颗星，音之主宰！' });
+      ach.push({ icon: '👑', title: _t('ach_300stars'), desc: _t('ach_300stars_desc') });
     }
 
     if (stats.levelsCompleted >= 5) {
-      ach.push({ icon: '🎧', title: '渐入佳境', desc: '成功通关5个不同关卡' });
+      ach.push({ icon: '🎧', title: _t('ach_5levels'), desc: _t('ach_5levels_desc') });
     }
     if (stats.levelsCompleted >= 50) {
-      ach.push({ icon: '📻', title: '行业老兵', desc: '成功通关50个不同关卡' });
+      ach.push({ icon: '📻', title: _t('ach_50levels'), desc: _t('ach_50levels_desc') });
     }
     if (stats.levelsCompleted >= 100) {
-      ach.push({ icon: '🏆', title: '大满贯', desc: '成功通关100个不同关卡' });
+      ach.push({ icon: '🏆', title: _t('ach_100levels'), desc: _t('ach_100levels_desc') });
     }
 
     if (stats.retriesCount >= 10) {
-      ach.push({ icon: '🔥', title: '百折不挠', desc: '累计重试10次，不言放弃' });
+      ach.push({ icon: '🔥', title: _t('ach_10retries'), desc: _t('ach_10retries_desc') });
     }
     if (stats.retriesCount >= 50) {
-      ach.push({ icon: '🦾', title: '千锤百炼', desc: '累计重试20次，毅力惊人' });
+      ach.push({ icon: '🦾', title: _t('ach_50retries'), desc: _t('ach_50retries_desc') });
     }
 
     if (stats.totalSweepEvents >= 1000) {
-      ach.push({ icon: '🌊', title: '冲浪达人', desc: '累计扫频操作超过1000次' });
+      ach.push({ icon: '🌊', title: _t('ach_1000sweeps'), desc: _t('ach_1000sweeps_desc') });
     }
     if (stats.extremeGainCount >= 20) {
-      ach.push({ icon: '💣', title: '重型装甲', desc: '累计使用极限增益超过20次' });
+      ach.push({ icon: '💣', title: _t('ach_20extremes'), desc: _t('ach_20extremes_desc') });
     }
     
     // Skill-based achievements based on averages
     if (stats.levelsPlayed >= 10 && (stats.totalTimeSpent / stats.levelsPlayed) < 25) {
-      ach.push({ icon: '⚡', title: '闪电手', desc: '10关以上平均单关决策时间少于25秒' });
+      ach.push({ icon: '⚡', title: _t('ach_fast_hands'), desc: _t('ach_fast_hands_desc') });
     }
     if (stats.levelsPlayed >= 10 && (stats.totalStars / stats.levelsPlayed) >= 2.8) {
-      ach.push({ icon: '🎯', title: '绝对音感', desc: '10关以上保持场均2.8星以上的极高评价' });
+      ach.push({ icon: '🎯', title: _t('ach_perfect_pitch'), desc: _t('ach_perfect_pitch_desc') });
     }
 
     return ach;

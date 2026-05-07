@@ -45,7 +45,8 @@ service cloud.firestore {
              (data.displayName == null || data.displayName is string) &&
              (data.email == null || data.email is string) &&
              (data.photoURL == null || data.photoURL is string) &&
-             (data.records == null || data.records is map);
+             (data.records == null || data.records is map) &&
+             (data.calibrationPresets == null || data.calibrationPresets is list);
     }
 
     function isValidScore(data) {
@@ -68,8 +69,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['stats', 'updatedAt', 'displayName', 'photoURL', 'records', 'email'])
+      allow update: if isOwner(userId) && (
+        // Allow full sync
+        (isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['stats', 'updatedAt', 'displayName', 'photoURL', 'records', 'email', 'calibrationPresets'])) ||
+        // Allow partial update (e.g. from updateCalibrationPresets)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['calibrationPresets', 'updatedAt']))
       );
     }
 

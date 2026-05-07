@@ -13,6 +13,8 @@ import { PlayerProfileManager } from '../lib/PlayerProfileManager';
 
 const bufferCache = new Map<string, Promise<AudioBuffer>>();
 
+import { useLanguage } from '../lib/LanguageContext';
+
 const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuffer> => {
     if (bufferCache.has(track.id)) {
         return bufferCache.get(track.id)!;
@@ -65,53 +67,55 @@ type TutorialStep = {
   hideNext?: boolean;
 }
 
-const TUTORIAL_STEPS: TutorialStep[] = [
-  { text: "", hideNext: true }, // 0
-  { 
-    text: "Oi！你的任务是尽力拟合目标声音。首先，点击上方的【Target】按钮，或者敲击C(Change)键 ，来听听我们要达成的目标声音。",
-    targetId: "tutorial-listen-mode",
-    nextText: "Next"
-  }, // 1
-  {
-    text: "Oi！听出区别了吗？现在切回【Your EQ】。请拖动图表中的黄色控制点看看。左右拖动改变频率，上下拖动改变增益。",
-    targetId: "tutorial-canvas",
-    nextText: "Next"
-  }, // 2
-  {
-    text: "Oi！听不到这个频段独有的声音特色？别急，按住面板中的耳机按钮，或者按住键盘的S键(Solo)，你就能听到这个频段的独特质感了。",
-    targetId: "tutorial-canvas", 
-    nextText: "Next"
-  }, // 3
-  {
-    text: "Oi！ 别忘记Bypass。现在，试着旁通这个节点，你可以按下B键(ByPass)？或者开关按钮？频点的面板或者下面的面板都可以。亦或者，最下面的BANDS？那里还有全局旁通呢。",
-    targetId: "tutorial-bottom-panel", 
-    nextText: "Next"  
-  }, // 4
-  {
-    text: "牛啊！除了位置，你还可以调整被影响区域的宽窄。按住键盘的 Alt 键 (Mac为Option) 并拖动节点（或直接使用鼠标滚轮滚动）来调整曲线的宽度。",
-    targetId: "tutorial-canvas",
-    nextText: "Next"
-  }, // 5
-  {
-    text: "Oi！当你以后遇到多个节点，除了鼠标选择，你同样可以使用A键、D键左右选择节点。当然，数字1-10也可以。",
-    targetId: "tutorial-canvas",
-    nextText: "Next"
-  }, // 6
-  {
-    text: "Oi！你已经掌握了所有基础操作！现在，尝试凭听觉将曲线调整到最接近目标的完美状态。满意后，点击右上方的【Submit Answer】 按钮（或按 Enter 键）提交计分吧！",
-    targetId: "tutorial-submit",
-    hideNext: true
-  }, // 7
-  {
-    text: "不知道你成绩如何，不过你可以在这里比较你的曲线和目标曲线，紫色的虚线就是目标曲线，尝试比较看看吧；",
-    targetId: "tutorial-canvas",
-    nextText: "关闭"
-  } // 8
-];
 
 function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => void, onClose: () => void }) {
+  const { t } = useLanguage();
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [maskDismissed, setMaskDismissed] = useState(false);
+  
+  const tutorialSteps = [
+    { text: "", hideNext: true }, // 0
+    { 
+      text: t('tut_step_1'),
+      targetId: "tutorial-listen-mode",
+      nextText: t('next')
+    }, // 1
+    {
+      text: t('tut_step_2'),
+      targetId: "tutorial-canvas",
+      nextText: t('next')
+    }, // 2
+    {
+      text: t('tut_step_3'),
+      targetId: "tutorial-canvas", 
+      nextText: t('next')
+    }, // 3
+    {
+      text: t('tut_step_4'),
+      targetId: "tutorial-bottom-panel", 
+      nextText: t('next')  
+    }, // 4
+    {
+      text: t('tut_step_5'),
+      targetId: "tutorial-canvas",
+      nextText: t('next')
+    }, // 5
+    {
+      text: t('tut_step_6'),
+      targetId: "tutorial-canvas",
+      nextText: t('next')
+    }, // 6
+    {
+      text: t('tut_step_1'), 
+      targetId: "tutorial-submit",
+      hideNext: true
+    }, // 7
+    {
+      text: t('tut_step_2'), 
+      targetId: "tutorial-canvas",
+      nextText: t('back_to_dashboard')
+    } // 8
+  ];
   
   useEffect(() => {
     setMaskDismissed(false);
@@ -124,11 +128,11 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
 
   useEffect(() => {
     if (step === 0) return;
-    const config = TUTORIAL_STEPS[step];
+    const config = tutorialSteps[step];
     
     let frame: number;
     const updateRect = () => {
-      if (config.targetId) {
+      if (config && config.targetId) {
         const el = document.getElementById(config.targetId);
         if (el) {
           setRect(el.getBoundingClientRect());
@@ -142,10 +146,10 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
     };
     frame = requestAnimationFrame(updateRect);
     return () => cancelAnimationFrame(frame);
-  }, [step]);
+  }, [step, tutorialSteps]);
   
-  if (step === 0 || step >= TUTORIAL_STEPS.length) return null;
-  const config = TUTORIAL_STEPS[step];
+  if (step === 0 || step >= tutorialSteps.length) return null;
+  const config = tutorialSteps[step];
 
   let maskStyle: React.CSSProperties = {
     boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.75)',
@@ -196,6 +200,7 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
 }
 
 export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, onSaveRecord, onRetry, onBack, onLevelChange }: GameViewProps) {
+  const { t } = useLanguage();
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [targetNodes, setTargetNodes] = useState<EQNodeData[]>([]);
@@ -669,7 +674,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
               onClick={handleSubmit}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-md shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
             >
-              Submit Answer
+              {t('submit_answer')}
             </button>
           ) : (
             <div className="flex items-center gap-4">
@@ -682,7 +687,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
                   )}
                 >
                   <Activity className="w-4 h-4 text-cyan-400" />
-                  <span className="text-sm">Score Report</span>
+                  <span className="text-sm">{t('score_report')}</span>
                 </button>
                 
                 {/* Detailed Score Report */}
@@ -700,7 +705,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                         <Activity className="w-4 h-4 text-cyan-400" />
-                        Score Report
+                        {t('score_report')}
                       </h3>
                       <button 
                         onClick={() => setShowScoreDetails(false)}
@@ -714,9 +719,9 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
                       {scoreReport!.nodeReports.map((r, i) => (
                           <div key={i} className="bg-slate-800/50 rounded-lg p-3 text-xs border border-slate-800">
                               <div className="flex justify-between items-center mb-1.5">
-                                <span className="font-mono text-cyan-400 font-semibold">{Math.round(r.targetNode.freq)}Hz Target</span>
+                                <span className="font-mono text-cyan-400 font-semibold">{Math.round(r.targetNode.freq)}Hz {t('target_eq')}</span>
                                 <span className={cn("font-bold px-1.5 py-0.5 rounded", r.isVetoed ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400")}>
-                                  {r.isVetoed ? '0 pts (VETO)' : `${Math.round(r.baseScore)} pts`}
+                                  {r.isVetoed ? `0 pts (${t('veto')})` : `${Math.round(r.baseScore)} pts`}
                                 </span>
                               </div>
                               {r.isVetoed ? (
@@ -735,7 +740,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
                           </div>
                       ))}
                       <div className="pt-3 border-t border-slate-700 font-bold flex justify-between items-center text-sm">
-                          <span className="text-slate-300">Weighted Total</span>
+                          <span className="text-slate-300">{t('weighted_total')}</span>
                           <span className={cn(
                             "text-lg",
                             scoreReport!.stars >= 1 ? "text-emerald-400" : "text-amber-400"

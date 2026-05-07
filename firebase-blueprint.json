@@ -11,9 +11,23 @@
         "photoURL": { "type": "string" },
         "stats": { "$ref": "PlayerStats" },
         "records": { "type": "object" },
+        "calibrationPresets": { "type": "array", "items": { "$ref": "CalibrationPreset" } },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "displayName", "stats"]
+    },
+    "CalibrationPreset": {
+      "title": "CalibrationPreset",
+      "description": "Headphone EQ correction preset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "nodes": { "type": "array" }
+      },
+      "required": ["id", "name", "nodes"]
     },
     "PlayerStats": {
       "title": "PlayerStats",

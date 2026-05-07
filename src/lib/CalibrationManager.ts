@@ -53,6 +53,25 @@ export class CalibrationManager {
     }
   }
 
+  static mergePresets(cloudPresets: CalibrationPreset[]) {
+    if (!cloudPresets || cloudPresets.length === 0) return;
+    
+    const local = this.getPresets();
+    const localIds = new Set(local.map(p => p.id));
+    
+    // Add only presets that don't exist locally
+    let mergedCount = 0;
+    const toAdd = cloudPresets.filter(cp => !localIds.has(cp.id));
+    
+    if (toAdd.length > 0) {
+      const newList = [...local, ...toAdd];
+      localStorage.setItem(this.PRESETS_KEY, JSON.stringify(newList));
+      mergedCount = toAdd.length;
+    }
+    
+    return mergedCount;
+  }
+
   static getActivePreset(): CalibrationPreset | null {
     const activeId = this.getActivePresetId();
     if (!activeId) return null;
