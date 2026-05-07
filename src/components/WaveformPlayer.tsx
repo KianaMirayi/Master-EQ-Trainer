@@ -12,7 +12,7 @@ interface WaveformPlayerProps {
   trackCoverArt?: string;
 }
 
-export function WaveformPlayer({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt }: WaveformPlayerProps) {
+export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt }: WaveformPlayerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(engine.isPlaying);
@@ -290,4 +290,4 @@ export function WaveformPlayer({ engine, isLoadingTrack, trackName, trackArtist,
       </div>
     </div>
   );
-}
+});

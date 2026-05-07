@@ -1318,7 +1318,9 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       className={cn("relative w-full h-full overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
       style={{ 
         backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)',
-        contain: 'paint' // CSS optimization
+        contain: 'paint',
+        transform: 'translateZ(0)', // Force separate layer for Safari
+        WebkitTransform: 'translateZ(0)'
       }}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
@@ -1337,8 +1339,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           width: '100%', 
           height: '100%',
           willChange: 'transform',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden'
+          transform: 'translate3d(0, 0, 0)',
+          WebkitTransform: 'translate3d(0, 0, 0)',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden'
         }}
       />
       
@@ -1372,13 +1376,14 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           <div
             key={node.id}
             style={{ 
-              left: `${xPos}px`, 
-              top: `${yPos}px`, 
-              transform: 'translate(-50%, -50%)',
+              transform: `translate3d(${xPos}px, ${yPos}px, 0) translate(-50%, -50%)`,
+              WebkitTransform: `translate3d(${xPos}px, ${yPos}px, 0) translate(-50%, -50%)`,
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
               touchAction: 'none',
               opacity: dotOpacity,
               transition: activeNodeIdx !== null ? 'none' : 'opacity 0.2s',
-              willChange: activeNodeIdx !== null ? 'left, top' : 'auto'
             }}
             className="absolute z-10 w-8 h-8 flex items-center justify-center select-none pointer-events-auto"
             onPointerEnter={() => handleMouseEnterNode(idx)}

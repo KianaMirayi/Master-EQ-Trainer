@@ -16,7 +16,7 @@ interface LevelMeterProps {
   isVisible?: boolean;
 }
 
-export function LevelMeter({ engine, className, isVisible = true }: LevelMeterProps) {
+export const LevelMeter = React.memo(({ engine, className, isVisible = true }: LevelMeterProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const meterPeakRef = useRef({ rms: -100, peak: -100, peakHold: -100, peakHoldFrames: 0 });
@@ -181,4 +181,4 @@ export function LevelMeter({ engine, className, isVisible = true }: LevelMeterPr
       />
     </div>
   );
-}
+});
