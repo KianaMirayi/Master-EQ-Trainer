@@ -23,15 +23,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
     setIsLoading(true);
-    FirebaseService.fetchLeaderboard(activeTab).then(data => {
-      if (isMounted) {
-        setLeaderboard(data);
-        setIsLoading(false);
-      }
+    const unsubscribe = FirebaseService.subscribeLeaderboard(activeTab, (data) => {
+      setLeaderboard(data);
+      setIsLoading(false);
     });
-    return () => { isMounted = false; };
+    return () => unsubscribe();
   }, [activeTab]);
 
   const userRank = leaderboard.findIndex(e => e.uid === auth.currentUser?.uid) + 1;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
 import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug } from 'lucide-react';
@@ -56,22 +56,27 @@ export default function App() {
     const unsubscribe = FirebaseService.onAuthChange(async (user) => {
       setUser(user);
       if (user) {
-        const cloudData = await FirebaseService.getUserData(user.uid) as any;
-        if (cloudData) {
-          if (cloudData.stats) PlayerProfileManager.mergeStats(cloudData.stats);
-          if (cloudData.records) {
-            ProgressionManager.mergeRecords(cloudData.records);
-            setRecords(ProgressionManager.getRecords());
-          }
-          if (cloudData.calibrationPresets) {
-            CalibrationManager.mergePresets(cloudData.calibrationPresets);
+        try {
+          const cloudData = await FirebaseService.getUserData(user.uid) as any;
+          if (cloudData) {
+            if (cloudData.stats) PlayerProfileManager.mergeStats(cloudData.stats);
+            if (cloudData.records) {
+              ProgressionManager.mergeRecords(cloudData.records);
+              setRecords(ProgressionManager.getRecords());
+            }
+            if (cloudData.calibrationPresets) {
+              CalibrationManager.mergePresets(cloudData.calibrationPresets);
+            }
           }
           
           // Re-sync back to cloud to ensure any local-only data is preserved and cloud is updated with combined state
+          // Even if cloudData was null, we want to push up current local state
           const updatedStats = PlayerProfileManager.loadStats();
           const updatedRecords = ProgressionManager.getRecords();
           const updatedPresets = CalibrationManager.getPresets();
           await FirebaseService.syncUserData(updatedStats, updatedRecords, updatedPresets);
+        } catch (err) {
+          console.error("Auth sync error:", err);
         }
       }
     });
@@ -190,6 +195,15 @@ export default function App() {
   const passedLevels = Object.keys(records).map(Number).filter((l) => records[l].passed);
   const highestUnlocked = Math.max(1, ...passedLevels.map((l) => l + 1));
   const masteryScore = Object.values(records).reduce((sum: number, r: any) => sum + (r.score || 0), 0);
+  const ami = useMemo(() => {
+    const stats = PlayerProfileManager.loadStats();
+    if (stats.levelsPlayed === 0) return 0;
+    const avgFreqError = stats.totalFreqError / stats.levelsPlayed;
+    const perception = Math.max(0, 100 - (avgFreqError / 12) * 100);
+    const avgStars = stats.totalStars / stats.levelsPlayed;
+    const precision = (avgStars / 3) * 100;
+    return Math.round((perception * 0.4 + precision * 0.6) * 100);
+  }, [records]);
 
   const handleLogin = async () => {
     setIsLoginOpen(true);
@@ -469,7 +483,7 @@ export default function App() {
               <div className="w-px h-8 bg-slate-800"></div>
               <div className="px-4 py-2 flex flex-col items-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{t('acoustic_index')}</span>
-                <span className="text-xl font-mono font-bold text-emerald-400">{user ? "9500" : "-"}</span> 
+                <span className="text-xl font-mono font-bold text-emerald-400">{user ? ami : "-"}</span> 
               </div>
             </button>
             

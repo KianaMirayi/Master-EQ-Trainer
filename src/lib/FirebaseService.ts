@@ -15,6 +15,7 @@ import {
   orderBy, 
   limit, 
   getDocs,
+  onSnapshot,
   serverTimestamp
 } from 'firebase/firestore';
 import { auth, db, signInWithGoogle, signInWithEmailAndPassword, sendPasswordResetEmail } from './firebase';
@@ -178,6 +179,22 @@ export class FirebaseService {
       console.error('Error fetching leaderboard', error);
       return [];
     }
+  }
+
+  static subscribeLeaderboard(type: 'ami' | 'mastery', callback: (data: LeaderboardEntry[]) => void, limitCount: number = 50) {
+    const leaderboardCol = collection(db, 'leaderboard');
+    const q = query(
+      leaderboardCol, 
+      orderBy(type === 'ami' ? 'ami' : 'masteryScore', 'desc'), 
+      limit(limitCount)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => doc.data() as LeaderboardEntry);
+      callback(data);
+    }, (error) => {
+      console.error('Leaderboard subscription error:', error);
+    });
   }
 
   static async getUserData(userId: string) {
