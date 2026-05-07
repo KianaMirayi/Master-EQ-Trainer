@@ -25,6 +25,15 @@ export interface LeaderboardEntry {
   ami: number;
   levelsCompleted: number;
   updatedAt: any;
+  // Radar components
+  radar?: {
+    perception: number;
+    precision: number;
+    efficiency: number;
+    spatial: number;
+    consistency: number;
+    restraint: number;
+  };
 }
 
 export class FirebaseService {
@@ -90,6 +99,17 @@ export class FirebaseService {
 
     const masteryScore = stats.totalStars;
     const ami = this.calculateAMI(stats);
+    
+    // Calculate radar components for leaderboard
+    const radarData = (await import('./PlayerProfileManager')).PlayerProfileManager.calculateRadarMap(stats);
+    const radar = {
+      perception: radarData[0].A,
+      precision: radarData[1].A,
+      efficiency: radarData[2].A,
+      spatial: radarData[3].A,
+      consistency: radarData[4].A,
+      restraint: radarData[5].A,
+    };
 
     const userData = {
       uid: user.uid,
@@ -109,6 +129,7 @@ export class FirebaseService {
       ami: ami,
       levelsCompleted: stats.levelsCompleted,
       updatedAt: serverTimestamp(),
+      radar: radar
     };
 
     try {

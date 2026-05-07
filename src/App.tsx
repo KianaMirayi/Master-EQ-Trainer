@@ -199,10 +199,6 @@ export default function App() {
   };
 
   const handleLevelComplete = (score: number, stars: number) => {
-    if (!isTestMode) {
-      saveScore(activeLevel, score, stars);
-    }
-    
     if (activeLevel === 100 && !isTestMode) {
       setShowPeakCongratulation(true);
       return;
@@ -354,8 +350,11 @@ export default function App() {
               selectedTrackId={selectedTrackId} 
               isTestMode={isTestMode}
               onLevelComplete={handleLevelComplete} 
-              onRetry={(score, stars) => {
+              onSaveRecord={(score, stars) => {
                 if (!isTestMode) saveScore(activeLevel, score, stars);
+              }}
+              onRetry={(score, stars) => {
+                // Progress is already saved in onSaveRecord during submission
               }}
               onBack={() => {
                  setIsTestMode(false);

@@ -50,6 +50,7 @@ interface GameViewProps {
   selectedTrackId: string;
   isTestMode?: boolean;
   onLevelComplete: (score: number, stars: number) => void;
+  onSaveRecord: (score: number, stars: number) => void;
   onRetry: (score: number, stars: number) => void;
   onBack: () => void;
   onLevelChange?: (level: number) => void;
@@ -194,7 +195,7 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
   );
 }
 
-export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, onRetry, onBack, onLevelChange }: GameViewProps) {
+export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, onSaveRecord, onRetry, onBack, onLevelChange }: GameViewProps) {
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [targetNodes, setTargetNodes] = useState<EQNodeData[]>([]);
@@ -564,6 +565,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
         };
         
         PlayerProfileManager.saveStats(newStats);
+        onSaveRecord(report.totalScore, report.stars);
       }
 
     }, 1400);

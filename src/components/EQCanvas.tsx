@@ -454,6 +454,11 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       closeEdit();
   };
 
+  // References for spectrum calculation reuse to avoid allocations
+  const specRawPointsRef = useRef<Float32Array | null>(null);
+  const specDilatedPointsRef = useRef<Float32Array | null>(null);
+  const specSmoothedPointsRef = useRef<Float32Array | null>(null);
+
   // References for temporal envelope smoothing
   const targetEnvelopeRef = useRef<Float32Array | null>(null);
   const userEnvelopeRef = useRef<Float32Array | null>(null);
@@ -491,6 +496,12 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // DPI Scaling Optimization
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = dimensions.width * dpr;
+    canvas.height = dimensions.height * dpr;
+    ctx.scale(dpr, dpr);
+
     let frameId: number;
     const draw = () => {
       const now = performance.now();
@@ -519,7 +530,6 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                   dimLevel = effectFade * 0.7;
               }
               
-              // Only draw if effectFade > 0
               if (effectFade <= 0) {
                   scanPhase = -1;
               }
@@ -530,7 +540,6 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
 
       // --- Draw Grid ---
       ctx.lineWidth = 1;
-      ctx.font = '10px monospace';
 
       const FREQ_TICKS = [
         20, 30, 40, 50, 60, 70, 80, 90, 100, 
@@ -543,105 +552,82 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         2000: '2k', 3000: '3k', 5000: '5k', 7000: '7k', 10000: '10k', 20000: '20k'
       };
 
-      // Vertical lines (Frequencies)
+      // Batch grid lines
+      ctx.beginPath();
+      FREQ_TICKS.forEach(freq => {
+        const x = freqToX(freq) * dimensions.width;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, dimensions.height);
+      });
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.stroke();
+
       FREQ_TICKS.forEach(freq => {
         const isMajorHighlight = [20, 200, 2000, 20000].includes(freq);
         const isMinorHighlight = [50, 500, 5000].includes(freq);
         const x = freqToX(freq) * dimensions.width;
         
-        if (isMajorHighlight) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        } else if (isMinorHighlight) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        } else {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        if (isMajorHighlight || isMinorHighlight) {
+            ctx.strokeStyle = isMajorHighlight ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, dimensions.height);
+            ctx.stroke();
         }
-        ctx.lineWidth = (isMajorHighlight || isMinorHighlight) ? 2 : 1;
-        
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, dimensions.height);
-        ctx.stroke();
 
         ctx.fillStyle = isMajorHighlight ? 'rgba(255, 255, 255, 0.8)' : (isMinorHighlight ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.4)');
-        if (isMajorHighlight) {
-            ctx.font = 'bold 11px monospace';
-        } else {
-            ctx.font = '10px monospace';
-        }
+        ctx.font = isMajorHighlight ? 'bold 11px monospace' : '10px monospace';
         
         let textX = x;
-        if (freq === 20) {
-            ctx.textAlign = 'left';
-            textX = x + 12; // Push far enough inward from left rounded corner
-        } else if (freq === 30000 || (freq === 20000 && x > dimensions.width - 25)) {
-            ctx.textAlign = 'right';
-            textX = x - 38; // Push away from right edge to avoid overlapping with -12 dB label
-        } else {
-            ctx.textAlign = 'center';
-        }
+        if (freq === 20) { ctx.textAlign = 'left'; textX = x + 12; } 
+        else if (freq === 20000 && x > dimensions.width - 25) { ctx.textAlign = 'right'; textX = x - 38; } 
+        else ctx.textAlign = 'center';
 
         ctx.textBaseline = 'bottom';
-        if (FREQ_LABELS[freq]) {
-            ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8); // Push up from bottom edge
-        }
+        if (FREQ_LABELS[freq]) ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8);
       });
 
-      ctx.font = '10px monospace'; // Reset font for horizontal lines
-
-      // Horizontal lines (Gain)
-      ctx.textAlign = 'right';
+      ctx.beginPath();
       const GAIN_TICKS = [12, 9, 6, 3, 0, -3, -6, -9, -12];
       GAIN_TICKS.forEach(gain => {
         const y = gainToY(gain) * dimensions.height;
-        if (gain === 0) {
-          ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)'; // Bright yellow for 0dB
-          ctx.lineWidth = 1.5;
-        } else {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-          ctx.lineWidth = 1;
-        }
-        ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(dimensions.width, y);
-        ctx.stroke();
+      });
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-        // Outer Gain Label
+      ctx.beginPath();
+      ctx.moveTo(0, gainToY(0) * dimensions.height);
+      ctx.lineTo(dimensions.width, gainToY(0) * dimensions.height);
+      ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.textAlign = 'right';
+      GAIN_TICKS.forEach(gain => {
+        const y = gainToY(gain) * dimensions.height;
         let textY = y;
-        if (gain === 12) {
-            ctx.textBaseline = 'top';
-            textY = y + 12; // Push down from top rounded corner
-        } else if (gain === -12) {
-            ctx.textBaseline = 'bottom';
-            textY = y - 12; // Push up from bottom rounded corner
-        } else {
-            ctx.textBaseline = 'middle';
-        }
-
+        if (gain === 12) { ctx.textBaseline = 'top'; textY = y + 12; } 
+        else if (gain === -12) { ctx.textBaseline = 'bottom'; textY = y - 12; } 
+        else ctx.textBaseline = 'middle';
         ctx.fillStyle = gain === 0 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(255, 255, 255, 0.4)';
         ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 6, textY);
       });
 
-      // Spectrum Amplitude Labels
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       const AMP_TICKS = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90];
       AMP_TICKS.forEach(amp => {
         const normalizedDb = Math.max(0, Math.min(1, (amp - (-100)) / (0 - (-100))));
         let y = dimensions.height - normalizedDb * dimensions.height;
-        
-        if (amp === 0) {
-            ctx.textBaseline = 'top';
-            y = y + 12; // Push down from top edge
-        } else if (amp === -90) {
-            ctx.textBaseline = 'bottom';
-            y = Math.min(y, dimensions.height - 18); // Push up from bottom edge, avoid frequency labels
-        } else {
-            ctx.textBaseline = 'middle';
-        }
-
+        if (amp === 0) { ctx.textBaseline = 'top'; y = y + 12; } 
+        else if (amp === -90) { ctx.textBaseline = 'bottom'; y = Math.min(y, dimensions.height - 18); } 
+        else ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.fillText(`${amp}`, 12, y); // Push right from left edge
+        ctx.fillText(`${amp}`, 12, y);
       });
 
       // --- Draw Global Gain Hints ---
@@ -668,20 +654,26 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         const binCount = data.length;
         const sampleRate = engine.ctx.sampleRate || 48000;
         
-        // Optimize resolution: 1 point per 4 pixels reduces frame drops significantly on large screens
+        // Restore higher resolution for visual smoothness
         const POINT_COUNT = Math.max(80, Math.floor(dimensions.width / 4));
         
-        // Initialize temporal envelope if needed
+        // Initialize buffers if needed (one-time allocation)
         if (!envelopeRef.current || envelopeRef.current.length !== POINT_COUNT) {
             envelopeRef.current = new Float32Array(POINT_COUNT).fill(-100);
+            specRawPointsRef.current = new Float32Array(POINT_COUNT);
+            specDilatedPointsRef.current = new Float32Array(POINT_COUNT);
+            specSmoothedPointsRef.current = new Float32Array(POINT_COUNT);
         }
+        
         const envelope = envelopeRef.current;
+        const rawPoints = specRawPointsRef.current!;
+        const dilatedPoints = specDilatedPointsRef.current!;
+        const smoothedPoints = specSmoothedPointsRef.current!;
         
-        const attackMultiplier = 0.08;  // Lower value = slower rise (less sensitive to sudden peaks)
-        const releaseMultiplier = 0.98; // Higher value = slower fall (smoother decay)
+        const attackMultiplier = 0.2;  // Increased for better "snappiness" (follow the sound better)
+        const releaseMultiplier = 0.96; 
 
-        const rawPoints = new Float32Array(POINT_COUNT);
-        
+        // 1. Restore Original Sampling Loop (Precision)
         for (let p = 0; p < POINT_COUNT; p++) {
            const xStart = p / POINT_COUNT;
            const xEnd = (p + 1) / POINT_COUNT;
@@ -708,7 +700,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                const vL = data[idxLow] === -Infinity ? -100 : data[idxLow];
                const vH = data[idxHigh] === -Infinity ? -100 : data[idxHigh];
                
-               // Cosine interpolation for smoother curves
+               // Original Cosine interpolation for smoother curves
                const mu2 = (1 - Math.cos(frac * Math.PI)) / 2;
                val = (vL * (1 - mu2) + vH * mu2);
            } else {
@@ -724,9 +716,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
            rawPoints[p] = val;
         }
 
-        // Spatial Smoothing (Visual Log-Domain)
-        // 1. Dilate (Max Hold)
-        const dilatedPoints = new Float32Array(POINT_COUNT);
+        // 2. Restore Original Smoothing Passes (Visual Fidelity)
         const dilateRadius = 1; 
         for (let p = 0; p < POINT_COUNT; p++) {
             let maxP = -100;
@@ -739,89 +729,68 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             dilatedPoints[p] = maxP;
         }
 
-        // 2. Blur (Moving Average)
-        const smoothedPoints = new Float32Array(POINT_COUNT);
-        const blurRadius = 3; // Reduced for performance, but still visually smooth due to canvas curve drawing
+        const blurRadius = 3; 
         for (let p = 0; p < POINT_COUNT; p++) {
              let sum = 0;
              let weightSum = 0;
              for (let dp = -blurRadius; dp <= blurRadius; dp++) {
                  const idx = p + dp;
                  if (idx >= 0 && idx < POINT_COUNT) {
-                     // Gaussian-like window function (smooth curve)
                      const weight = Math.exp(-(dp*dp) / ((blurRadius/2)*(blurRadius/2)));
                      sum += dilatedPoints[idx] * weight;
                      weightSum += weight;
                  }
              }
-             smoothedPoints[p] = sum / weightSum;
+             
+             const targetLevel = sum / weightSum;
+             const prev = envelope[p];
+             
+             if (targetLevel > prev) {
+                 envelope[p] = targetLevel * attackMultiplier + prev * (1 - attackMultiplier);
+             } else {
+                 envelope[p] = targetLevel * (1 - releaseMultiplier) + prev * releaseMultiplier;
+             }
+             
+             smoothedPoints[p] = Math.max(0, Math.min(1, (envelope[p] - (-100)) / 100));
         }
 
-        const points: {x: number, y: number}[] = [];
-        
-        for (let p = 0; p < POINT_COUNT; p++) {
-           // Temporal Envelope Smoothing
-           const curr = smoothedPoints[p];
-           const prev = envelope[p];
-           
-           if (curr > prev) {
-               envelope[p] = curr * attackMultiplier + prev * (1 - attackMultiplier);
-           } else {
-               envelope[p] = curr * (1 - releaseMultiplier) + prev * releaseMultiplier;
-           }
-
-           const db = envelope[p];
-           const maxDb = 0;
-           const minDb = -100;
-           const normalizedDb = Math.max(0, Math.min(1, (db - minDb) / (maxDb - minDb)));
-           const yPos = dimensions.height - normalizedDb * dimensions.height;
-           const xPos = (p + 0.5) / POINT_COUNT * dimensions.width;
-           
-           points.push({ x: xPos, y: yPos });
-        }
-
-        if (points.length < 2) return;
-
-        // Draw Filled Area
+        // 3. Draw Path (Bezier-like curves)
         ctx.beginPath();
+        const firstY = dimensions.height - smoothedPoints[0] * dimensions.height;
         ctx.moveTo(0, dimensions.height);
-        ctx.lineTo(points[0].x, points[0].y);
+        ctx.lineTo(0, firstY);
         
-        for (let i = 1; i < points.length - 2; i++) {
-          const xc = (points[i].x + points[i + 1].x) / 2;
-          const yc = (points[i].y + points[i + 1].y) / 2;
-          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-        }
-        if (points.length > 2) {
-            ctx.quadraticCurveTo(
-                points[points.length - 2].x, points[points.length - 2].y, 
-                points[points.length - 1].x, points[points.length - 1].y
-            );
+        for (let i = 0; i < POINT_COUNT - 1; i++) {
+            const x = (i / (POINT_COUNT - 1)) * dimensions.width;
+            const nx = ((i + 1) / (POINT_COUNT - 1)) * dimensions.width;
+            const y = dimensions.height - smoothedPoints[i] * dimensions.height;
+            const ny = dimensions.height - smoothedPoints[i+1] * dimensions.height;
+            const xc = (x + nx) / 2;
+            const yc = (y + ny) / 2;
+            ctx.quadraticCurveTo(x, y, xc, yc);
         }
         
-        const lastX = points[points.length - 1].x;
-        ctx.lineTo(lastX, dimensions.height);
-        ctx.lineTo(0, dimensions.height);
+        ctx.lineTo(dimensions.width, dimensions.height - smoothedPoints[POINT_COUNT-1] * dimensions.height);
+        ctx.lineTo(dimensions.width, dimensions.height);
         ctx.closePath();
+        
         ctx.fillStyle = colorGr;
         ctx.fill();
-
-        // Draw Stroke (Line)
+        
         if (strokeColor) {
             ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            
-            for (let i = 1; i < points.length - 2; i++) {
-              const xc = (points[i].x + points[i + 1].x) / 2;
-              const yc = (points[i].y + points[i + 1].y) / 2;
-              ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+            const startY = dimensions.height - smoothedPoints[0] * dimensions.height;
+            ctx.moveTo(0, startY);
+            for (let i = 0; i < POINT_COUNT - 1; i++) {
+                const x = (i / (POINT_COUNT - 1)) * dimensions.width;
+                const nx = ((i + 1) / (POINT_COUNT - 1)) * dimensions.width;
+                const y = dimensions.height - smoothedPoints[i] * dimensions.height;
+                const ny = dimensions.height - smoothedPoints[i+1] * dimensions.height;
+                const xc = (x + nx) / 2;
+                const yc = (y + ny) / 2;
+                ctx.quadraticCurveTo(x, y, xc, yc);
             }
-            if (points.length > 2) {
-                ctx.quadraticCurveTo(
-                    points[points.length - 2].x, points[points.length - 2].y, 
-                    points[points.length - 1].x, points[points.length - 1].y
-                );
-            }
+            ctx.lineTo(dimensions.width, dimensions.height - smoothedPoints[POINT_COUNT-1] * dimensions.height);
             ctx.strokeStyle = strokeColor;
             ctx.lineWidth = 1.5;
             ctx.stroke();

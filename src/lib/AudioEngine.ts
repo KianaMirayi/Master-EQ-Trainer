@@ -82,10 +82,10 @@ export class AudioEngine {
     this.targetAnalyser = this.ctx.createAnalyser();
     this.userAnalyser = this.ctx.createAnalyser();
     
-    this.targetAnalyser.fftSize = 8192;
-    this.userAnalyser.fftSize = 8192;
-    this.targetAnalyser.smoothingTimeConstant = 0.5; // Baseline smoothing
-    this.userAnalyser.smoothingTimeConstant = 0.5;
+    this.targetAnalyser.fftSize = 4096;
+    this.userAnalyser.fftSize = 4096;
+    this.targetAnalyser.smoothingTimeConstant = 0.65; // Balanced smoothing
+    this.userAnalyser.smoothingTimeConstant = 0.65;
 
     // Analysers need a sink to process continuously if not connected to main output
     const dummySink = this.ctx.createGain();

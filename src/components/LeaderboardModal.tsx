@@ -17,7 +17,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
   const [activeTab, setActiveTab] = useState<'mastery' | 'ami'>('ami');
   const [showAmiInfo, setShowAmiInfo] = useState(false);
   const [showMasteryInfo, setShowMasteryInfo] = useState(false);
-  const [selectedRank, setSelectedRank] = useState<number | null>(null);
+  const [expandedUid, setExpandedUid] = useState<string | null>(null);
   
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,13 +204,19 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
                 leaderboard.map((entry, index) => {
                   const rank = index + 1;
                   const isUser = entry.uid === auth.currentUser?.uid;
+                  const isExpanded = expandedUid === entry.uid;
                   
                   return (
                     <div key={entry.uid} className="relative">
-                      <div 
-                        className={cn("flex flex-col p-3 rounded-lg transition-colors relative", isUser ? "bg-cyan-500/10 border border-cyan-500/20 shadow-[0_0_10px_rgba(6,182,212,0.05)]" : "hover:bg-slate-800/50")}
+                      <button 
+                        onClick={() => setExpandedUid(isExpanded ? null : entry.uid)}
+                        className={cn(
+                          "w-full flex flex-col p-3 rounded-lg transition-all text-left outline-none", 
+                          isUser ? "bg-cyan-500/10 border border-cyan-500/20 shadow-[0_0_10px_rgba(6,182,212,0.05)]" : "hover:bg-slate-800/50",
+                          isExpanded && "bg-slate-800 ring-1 ring-slate-700 shadow-xl"
+                        )}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="w-full flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className={cn(
                               "w-8 h-8 font-black rounded-lg flex items-center justify-center shrink-0",
@@ -243,7 +249,47 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
                             </div>
                           </div>
                         </div>
-                      </div>
+
+                        {/* Expanded Radar Stats */}
+                        <AnimatePresence>
+                          {isExpanded && entry.radar && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {[
+                                  { label: 'Perception', value: entry.radar.perception, color: 'text-rose-400' },
+                                  { label: 'Precision', value: entry.radar.precision, color: 'text-cyan-400' },
+                                  { label: 'Efficiency', value: entry.radar.efficiency, color: 'text-amber-400' },
+                                  { label: 'Spatial', value: entry.radar.spatial, color: 'text-emerald-400' },
+                                  { label: 'Consistency', value: entry.radar.consistency, color: 'text-indigo-400' },
+                                  { label: 'Restraint', value: entry.radar.restraint, color: 'text-orange-400' },
+                                ].map((stat) => (
+                                  <div key={stat.label} className="bg-slate-950/50 rounded-lg p-2 border border-slate-800">
+                                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">{stat.label}</div>
+                                    <div className={cn("text-lg font-mono font-bold", stat.color)}>
+                                      {stat.value}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        
+                        {isExpanded && !entry.radar && (
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="text-xs text-slate-500 italic mt-3 text-center"
+                          >
+                            Detailed stats not available for this player
+                          </motion.div>
+                        )}
+                      </button>
                     </div>
                   );
                 })

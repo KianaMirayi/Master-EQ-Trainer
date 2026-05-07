@@ -40,18 +40,23 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.uid is string &&
-             data.displayName is string &&
              data.uid == request.auth.uid &&
-             isValidPlayerStats(data.stats);
+             isValidPlayerStats(data.stats) &&
+             (data.displayName == null || data.displayName is string) &&
+             (data.email == null || data.email is string) &&
+             (data.photoURL == null || data.photoURL is string) &&
+             (data.records == null || data.records is map);
     }
 
     function isValidScore(data) {
       return data.uid is string &&
-             data.displayName is string &&
              data.uid == request.auth.uid &&
              data.masteryScore is number &&
              data.ami is number &&
-             data.levelsCompleted is number;
+             data.levelsCompleted is number &&
+             (data.displayName == null || data.displayName is string) &&
+             (data.photoURL == null || data.photoURL is string) &&
+             (data.radar == null || data.radar is map);
     }
 
     // Catch-all deny
@@ -64,17 +69,16 @@ service cloud.firestore {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['stats', 'updatedAt', 'displayName', 'photoURL'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['stats', 'updatedAt', 'displayName', 'photoURL', 'records', 'email'])
       );
     }
 
     // Leaderboard collection
     match /leaderboard/{userId} {
-      allow get: if true;
-      allow list: if true; // Public leaderboard
+      allow get, list: if true;
       allow create: if isOwner(userId) && isValidScore(incoming());
       allow update: if isOwner(userId) && isValidScore(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['masteryScore', 'ami', 'levelsCompleted', 'updatedAt', 'displayName', 'photoURL'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['masteryScore', 'ami', 'levelsCompleted', 'updatedAt', 'displayName', 'photoURL', 'radar'])
       );
     }
   }
