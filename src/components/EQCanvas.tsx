@@ -173,6 +173,12 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     onNodeSoloChange?.(listeningNodeIdx !== null);
   }, [listeningNodeIdx, onNodeSoloChange]);
 
+  useEffect(() => {
+      if (selectedNodeIdx !== null) {
+          engine.playEffect('select');
+      }
+  }, [selectedNodeIdx, engine]);
+
   const [openDropdown, setOpenDropdown] = useState<'none' | 'type' | 'stereo' | 'tooltipType'>('none');
   
   const [panelOffsets, setPanelOffsets] = useState<Record<number, number>>({});

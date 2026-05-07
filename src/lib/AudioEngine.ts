@@ -78,7 +78,7 @@ export class AudioEngine {
     this.userGain.connect(this.masterGain);
     this.soloGain.connect(this.masterGain);
     
-    // Analysers
+      // Analysers
     this.targetAnalyser = this.ctx.createAnalyser();
     this.userAnalyser = this.ctx.createAnalyser();
     
@@ -101,6 +101,40 @@ export class AudioEngine {
     this.loopEnd = buffer.duration;
     if (this.isPlaying) {
       this.play(0);
+    }
+  }
+
+  playEffect(type: 'select' | 'change' | 'delete') {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    const now = this.ctx.currentTime;
+    
+    if (type === 'select') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } else if (type === 'change') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } else if (type === 'delete') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.2);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.2);
     }
   }
 
