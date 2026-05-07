@@ -170,6 +170,22 @@ export default function App() {
   const highestUnlocked = Math.max(1, ...passedLevels.map((l) => l + 1));
   const masteryScore = Object.values(records).reduce((sum: number, r: any) => sum + (r.score || 0), 0);
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    try {
+      await FirebaseService.login();
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await FirebaseService.logout();
+  };
+
   const handleLevelSelect = (level: number, testMode: boolean = false) => {
     if (!testMode) {
       const check = ProgressionManager.checkEnterLevel(level) as any;
@@ -220,7 +236,7 @@ export default function App() {
           <LeaderboardModal 
             onClose={() => setIsLeaderboardOpen(false)} 
             isLoggedIn={!!user} 
-            onLogin={() => FirebaseService.login()} 
+            onLogin={handleLogin} 
             masteryScore={masteryScore} 
           />
         )}
@@ -389,7 +405,7 @@ export default function App() {
               <UserProfileDashboard 
                 stats={PlayerProfileManager.loadStats()} 
                 isLoggedIn={!!user}
-                onLoginToggle={() => user ? FirebaseService.logout() : FirebaseService.login()}
+                onLoginToggle={() => user ? handleLogout() : handleLogin()}
               />
             </div>
           </motion.div>
