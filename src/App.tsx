@@ -330,20 +330,20 @@ export default function App() {
   const gridMaxHeightVh = 45; // 控制网格视图的垂直显示范围(最大高度vh单位)。在此框内进行滚动，减小该值可让框体变扁（例如40~45可正好显示5行）
 
   const maxPassedLevel = Math.max(0, ...passedLevels);
-  let titleStr = "音频新手 (Audio Rookie)";
+  let titleStr = t('title_0');
   let titleColor = "text-slate-400";
   let badgeColor = "bg-slate-800 border-slate-700";
 
-  if (maxPassedLevel >= 100) { titleStr = "声学幻神 / 调音之神 (God of Sound)"; titleColor = "text-yellow-400"; badgeColor = "bg-yellow-500/20 border-yellow-500/50"; }
-  else if (maxPassedLevel >= 90) { titleStr = "声音雕塑师 (Sound Sculpture)"; titleColor = "text-amber-400"; badgeColor = "bg-amber-500/20 border-amber-500/50"; }
-  else if (maxPassedLevel >= 80) { titleStr = "金耳朵 (Golden Ear)"; titleColor = "text-orange-400"; badgeColor = "bg-orange-500/20 border-orange-500/50"; }
-  else if (maxPassedLevel >= 70) { titleStr = "首席母带师 (Mastering Engineer)"; titleColor = "text-rose-400"; badgeColor = "bg-rose-500/20 border-rose-500/50"; }
-  else if (maxPassedLevel >= 60) { titleStr = "资深声学师 (Senior Acoustician)"; titleColor = "text-pink-400"; badgeColor = "bg-pink-500/20 border-pink-500/50"; }
-  else if (maxPassedLevel >= 50) { titleStr = "录音棚大拿 (Studio Engineer)"; titleColor = "text-fuchsia-400"; badgeColor = "bg-fuchsia-500/20 border-fuchsia-500/50"; }
-  else if (maxPassedLevel >= 40) { titleStr = "驻场调音师 (House Engineer)"; titleColor = "text-purple-400"; badgeColor = "bg-purple-500/20 border-purple-500/50"; }
-  else if (maxPassedLevel >= 30) { titleStr = "频段工匠 (Frequency Crafter)"; titleColor = "text-violet-400"; badgeColor = "bg-violet-500/20 border-violet-500/50"; }
-  else if (maxPassedLevel >= 20) { titleStr = "混音助理 (Mixing Assistant)"; titleColor = "text-indigo-400"; badgeColor = "bg-indigo-500/20 border-indigo-500/50"; }
-  else if (maxPassedLevel >= 10) { titleStr = "调音学徒 (Audio Apprentice)"; titleColor = "text-blue-400"; badgeColor = "bg-blue-500/20 border-blue-500/50"; }
+  if (maxPassedLevel >= 100) { titleStr = t('title_100'); titleColor = "text-yellow-400"; badgeColor = "bg-yellow-500/20 border-yellow-500/50"; }
+  else if (maxPassedLevel >= 90) { titleStr = t('title_90'); titleColor = "text-amber-400"; badgeColor = "bg-amber-500/20 border-amber-500/50"; }
+  else if (maxPassedLevel >= 80) { titleStr = t('title_80'); titleColor = "text-orange-400"; badgeColor = "bg-orange-500/20 border-orange-500/50"; }
+  else if (maxPassedLevel >= 70) { titleStr = t('title_70'); titleColor = "text-rose-400"; badgeColor = "bg-rose-500/20 border-rose-500/50"; }
+  else if (maxPassedLevel >= 60) { titleStr = t('title_60'); titleColor = "text-pink-400"; badgeColor = "bg-pink-500/20 border-pink-500/50"; }
+  else if (maxPassedLevel >= 50) { titleStr = t('title_50'); titleColor = "text-fuchsia-400"; badgeColor = "bg-fuchsia-500/20 border-fuchsia-500/50"; }
+  else if (maxPassedLevel >= 40) { titleStr = t('title_40'); titleColor = "text-purple-400"; badgeColor = "bg-purple-500/20 border-purple-500/50"; }
+  else if (maxPassedLevel >= 30) { titleStr = t('title_30'); titleColor = "text-violet-400"; badgeColor = "bg-violet-500/20 border-violet-500/50"; }
+  else if (maxPassedLevel >= 20) { titleStr = t('title_20'); titleColor = "text-indigo-400"; badgeColor = "bg-indigo-500/20 border-indigo-500/50"; }
+  else if (maxPassedLevel >= 10) { titleStr = t('title_10'); titleColor = "text-blue-400"; badgeColor = "bg-blue-500/20 border-blue-500/50"; }
 
 
   return (
@@ -407,7 +407,7 @@ export default function App() {
                 className="flex items-center gap-2 text-slate-400 hover:text-white transition"
               >
                 <ChevronLeft className="w-5 h-5" />
-                <span className="font-semibold tracking-wide">Back to Dashboard</span>
+                <span className="font-semibold tracking-wide">{t('back_to_dashboard')}</span>
               </button>
             </div>
             <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden">
@@ -455,7 +455,7 @@ export default function App() {
             <button 
               onClick={() => setIsLeaderboardOpen(true)}
               className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-2 rounded-xl hover:bg-slate-800 transition cursor-pointer text-left"
-              title="View Leaderboards"
+              title={t('view_leaderboards')}
             >
               <div className="px-4 py-2 flex flex-col items-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{t('mastery_score')}</span>
@@ -471,7 +471,7 @@ export default function App() {
             <button 
               onClick={() => setCurrentView('profile')}
               className={cn("p-3.5 border rounded-xl transition shadow-sm", user ? "bg-cyan-900/20 border-cyan-800 text-cyan-400 hover:bg-cyan-900/40" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
-              title={user ? "Player Profile" : "Sign In / Profile"}
+              title={user ? t('player_profile') : t('signin_profile')}
             >
               {user ? (
                 user.photoURL ? (
@@ -487,7 +487,7 @@ export default function App() {
             <button 
               onClick={() => setIsSettingsOpen(true)}
               className="p-3.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 hover:text-slate-200 transition shadow-sm"
-              title="Settings"
+              title={t('settings')}
             >
               <Settings className="w-5 h-5" />
             </button>
@@ -499,7 +499,7 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-amber-400" />
-                  Journey
+                  {t('journey')}
                 </h2>
                 <div className={cn("px-2.5 py-1 rounded-md text-xs font-medium border", badgeColor, titleColor)}>
                   {titleStr}
@@ -511,14 +511,14 @@ export default function App() {
                    <button 
                      onClick={() => setDashboardMode('carousel')}
                      className={cn("p-1.5 rounded-md transition-colors", dashboardMode === 'carousel' ? "bg-cyan-500/20 text-cyan-400" : "text-slate-500 hover:text-slate-300")}
-                     title="Carousel View"
+                     title={t('carousel_view')}
                    >
                      <StretchHorizontal className="w-4 h-4" />
                    </button>
                    <button 
                      onClick={() => setDashboardMode('grid')}
                      className={cn("p-1.5 rounded-md transition-colors", dashboardMode === 'grid' ? "bg-cyan-500/20 text-cyan-400" : "text-slate-500 hover:text-slate-300")}
-                     title="Grid View"
+                     title={t('grid_view')}
                    >
                      <LayoutGrid className="w-4 h-4" />
                    </button>
@@ -595,7 +595,7 @@ export default function App() {
                             </div>
                           </>
                         ) : (
-                          <span className="text-[10px] font-medium tracking-widest text-slate-500 uppercase mt-1">NEW</span>
+                          <span className="text-[10px] font-medium tracking-widest text-slate-500 uppercase mt-1">{t('new_level')}</span>
                         )}
                       </div>
                     )}
@@ -647,7 +647,7 @@ export default function App() {
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <Music className="w-5 h-5 text-cyan-400 ml-1"/>
-                  Audio Source
+                  {t('audio_source')}
                 </>
               )}
             </h2>
@@ -687,8 +687,8 @@ export default function App() {
                       <Music className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-slate-200">Audio Source</h3>
-                      <p className="text-sm text-slate-400 mt-0.5">Manage tracks and playback mode</p>
+                      <h3 className="font-medium text-slate-200">{t('audio_source')}</h3>
+                      <p className="text-sm text-slate-400 mt-0.5">{t('manage_tracks')}</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
@@ -706,8 +706,8 @@ export default function App() {
                       <Activity className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-slate-200">Headphone Calibration</h3>
-                      <p className="text-sm text-slate-400 mt-0.5">Counteract headphone coloration</p>
+                      <h3 className="font-medium text-slate-200">{t('hp_calibration')}</h3>
+                      <p className="text-sm text-slate-400 mt-0.5">{t('hp_calibration_desc')}</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
@@ -721,7 +721,7 @@ export default function App() {
                   </div>
                   <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
                     <p className="text-[11px] text-slate-500 leading-relaxed italic">
-                      This application is intended for educational purposes. We are not liable for any auditory fatigue or damage due to excessive playback levels. Always listen responsibly.
+                      {t('about_disclaimer')}
                     </p>
                   </div>
                   
@@ -731,7 +731,7 @@ export default function App() {
                       onClick={() => alert(`Thank you for your interest! Support this project via USDT (TRC20): TYourAddressGoesHere\nOr visit our Ko-fi page.`)}
                       className="w-full py-2.5 bg-gradient-to-r from-amber-500/5 to-amber-500/10 hover:from-amber-500/10 hover:to-amber-500/20 border border-amber-500/20 rounded-lg text-amber-500/80 text-[10px] uppercase font-bold tracking-widest transition-all"
                     >
-                      Support Developmental Efforts
+                      {t('support_project')}
                     </button>
                     <div className="text-[10px] text-center text-slate-500 opacity-30 hover:opacity-100 transition-opacity cursor-default">
                       Keep the bits flowing. Stay focused.
@@ -742,21 +742,21 @@ export default function App() {
             ) : (
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-2">Random Playback Mode</label>
+                  <label className="block text-sm text-slate-400 mb-2">{t('playback_mode')}</label>
                   <div className="grid grid-cols-1 gap-2">
                     <button 
                       onClick={() => setSelectedTrackId('random')}
                       className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2", selectedTrackId === 'random' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
                     >
                       <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random' ? 'bg-cyan-400' : 'bg-transparent')} />
-                      Random (All Tracks)
+                      {t('random_all')}
                     </button>
                     <button 
                       onClick={() => setSelectedTrackId('random-builtin')}
                       className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2", selectedTrackId === 'random-builtin' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
                     >
                       <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-builtin' ? 'bg-cyan-400' : 'bg-transparent')} />
-                      Random (Built-in)
+                      {t('random_builtin')}
                     </button>
                     <button 
                       onClick={() => tracks.custom.length > 0 && setSelectedTrackId('random-custom')}
@@ -764,13 +764,13 @@ export default function App() {
                       className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed", selectedTrackId === 'random-custom' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
                     >
                       <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-custom' ? 'bg-cyan-400' : 'bg-transparent')} />
-                      Random (Custom)
+                      {t('random_custom')}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-slate-400 mb-2">Built-in Tracks</label>
+                  <label className="block text-sm text-slate-400 mb-2">{t('builtin_tracks')}</label>
                   <div className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar">
                     {tracks.builtIn.map(t => (
                       <button 
@@ -796,10 +796,10 @@ export default function App() {
 
                 <div>
                   <label className="flex items-center justify-between text-sm text-slate-400 mb-2">
-                    <span>Custom Tracks</span>
+                    <span>{t('custom_tracks')}</span>
                   </label>
                   <p className="text-xs text-slate-500 mb-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
-                    Your custom audio is processed purely locally in your browser. It will <strong>NOT</strong> be uploaded to the server, protecting your privacy and avoiding copyright risks.
+                    {t('custom_track_desc')}
                   </p>
                   <div 
                     className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3 relative"
@@ -809,7 +809,7 @@ export default function App() {
                     {isUploading && (
                       <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-lg">
                         <Activity className="w-5 h-5 text-cyan-400 animate-spin mb-2" />
-                        <span className="text-xs font-medium text-cyan-400">Loading Tracks...</span>
+                        <span className="text-xs font-medium text-cyan-400">{t('uploading_tracks')}</span>
                       </div>
                     )}
                     {tracks.custom.length > 0 ? tracks.custom.map(t => (
@@ -844,7 +844,7 @@ export default function App() {
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full px-3 py-8 text-center text-sm text-slate-500 hover:text-slate-400 bg-slate-900/30 hover:bg-slate-900/50 rounded-lg border border-dashed border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
                       >
-                        Drag & Drop or Click to Upload
+                        {t('drag_drop_upload')}
                       </button>
                     ))}
                   </div>
@@ -864,7 +864,7 @@ export default function App() {
                       title="Supported formats: MP3, WAV, AAC, OGG, FLAC (Max 50MB)"
                   >
                       {isUploading ? <Activity className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      {isUploading ? 'Uploading...' : 'Upload Tracks'}
+                      {isUploading ? t('uploading') : t('upload_tracks')}
                   </button>
                   <p className="text-xs text-center text-slate-500 mt-3">Supported formats: MP3, WAV, AAC, OGG, FLAC</p>
                 </div>
@@ -874,7 +874,7 @@ export default function App() {
           {settingsView === 'main' && (
             <div className="p-6 border-t border-slate-800 bg-slate-900 mt-auto">
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-slate-400">Test Environment</span>
+                <span className="text-sm font-medium text-slate-400">{t('test_env')}</span>
                 <button 
                   onClick={() => {
                     setIsSettingsOpen(false);
@@ -883,7 +883,7 @@ export default function App() {
                   className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 text-sm font-bold rounded-lg transition-colors border border-slate-700 flex items-center justify-center gap-2"
                 >
                   <Bug className="w-4 h-4" />
-                  Enter Test Mode
+                  {t('enter_test_mode')}
                 </button>
               </div>
             </div>

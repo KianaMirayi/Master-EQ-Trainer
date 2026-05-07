@@ -1316,7 +1316,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     <div 
       ref={containerRef}
       className={cn("relative w-full h-full overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
-      style={{ backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)' }}
+      style={{ 
+        backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)',
+        contain: 'paint' // CSS optimization
+      }}
       onPointerDown={() => {
         setSelectedNodeIdx(null);
         setOpenDropdown('none');
@@ -1329,9 +1332,14 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     >
       <canvas
         ref={canvasRef}
-        width={dimensions.width}
-        height={dimensions.height}
         className="absolute inset-0 pointer-events-none"
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          willChange: 'transform',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden'
+        }}
       />
       
       {userNodes.map((node, idx) => {
@@ -1369,7 +1377,8 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
               transform: 'translate(-50%, -50%)',
               touchAction: 'none',
               opacity: dotOpacity,
-              transition: 'opacity 0.2s',
+              transition: activeNodeIdx !== null ? 'none' : 'opacity 0.2s',
+              willChange: activeNodeIdx !== null ? 'left, top' : 'auto'
             }}
             className="absolute z-10 w-8 h-8 flex items-center justify-center select-none pointer-events-auto"
             onPointerEnter={() => handleMouseEnterNode(idx)}

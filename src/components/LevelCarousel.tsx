@@ -3,18 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ProgressionManager } from '../lib/ProgressionManager';
+import { useLanguage } from '../lib/LanguageContext';
 
-const getBossUnlockTitle = (level: number) => {
-  if (level === 10) return "调音学徒认证";
-  if (level === 20) return "混音助理认证";
-  if (level === 30) return "频段工匠认证";
-  if (level === 40) return "驻场调音师认证";
-  if (level === 50) return "录音棚大拿认证";
-  if (level === 60) return "资深声学师认证";
-  if (level === 70) return "首席母带师认证";
-  if (level === 80) return "金耳朵认证";
-  if (level === 90) return "声音雕塑师认证";
-  if (level === 100) return "声学幻神 / 调音之神认证";
+const getBossUnlockTitle = (level: number, t: (key: string) => string) => {
+  if (level === 10) return t('boss_10');
+  if (level === 20) return t('boss_20');
+  if (level === 30) return t('boss_30');
+  if (level === 40) return t('boss_40');
+  if (level === 50) return t('boss_50');
+  if (level === 60) return t('boss_60');
+  if (level === 70) return t('boss_70');
+  if (level === 80) return t('boss_80');
+  if (level === 90) return t('boss_90');
+  if (level === 100) return t('boss_100');
   return null;
 };
 
@@ -43,6 +44,7 @@ export function LevelCarousel({
   offsetY = 0,
   indicatorOffsetY = 0
 }: LevelCarouselProps) {
+  const { t } = useLanguage();
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const wheelAccumulator = useRef<number>(0);
@@ -249,7 +251,7 @@ export function LevelCarousel({
                                 {isBoss && !isPassed && (
                                     <div className="mt-3 text-center">
                                         <span className="text-amber-500/80 text-xs font-bold tracking-widest drop-shadow-md">
-                                            {getBossUnlockTitle(level)}
+                                            {getBossUnlockTitle(level, t)}
                                         </span>
                                     </div>
                                 )}
@@ -270,7 +272,7 @@ export function LevelCarousel({
                                                 </div>
                                             </>
                                         ) : (
-                                            <span className="text-xs font-bold tracking-widest text-slate-300 uppercase py-1">Undiscovered</span>
+                                            <span className="text-xs font-bold tracking-widest text-slate-300 uppercase py-1">{t('undiscovered')}</span>
                                         )}
                                     </div>
                                 )}
