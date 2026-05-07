@@ -1,12 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { PlayerProfileManager, PlayerStats } from '../lib/PlayerProfileManager';
-import { Trophy, Activity, Target, User, CloudUpload } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Trophy, Activity, Target, User, CloudUpload, ShieldCheck, ShieldAlert, Edit2, Check, X as CloseIcon, Loader2, RefreshCw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FirebaseService } from '../lib/FirebaseService';
+import { User as FirebaseUser } from 'firebase/auth';
+import { cn } from '../lib/utils';
 
 interface Props {
   stats: PlayerStats;
-  isLoggedIn?: boolean;
+  user?: FirebaseUser | null;
   onLoginToggle?: () => void;
 }
 
@@ -35,10 +38,66 @@ const CustomTick = ({ payload, x, y, textAnchor, stroke, radius, radarData }: an
   );
 };
 
-export function UserProfileDashboard({ stats, isLoggedIn, onLoginToggle }: Props) {
+export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
   const radarData = useMemo(() => PlayerProfileManager.calculateRadarMap(stats), [stats]);
   const personas = useMemo(() => PlayerProfileManager.getPersonas(stats), [stats]);
   const achievements = useMemo(() => PlayerProfileManager.getAchievements(stats), [stats]);
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState(user?.displayName || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+
+  const handleUpdateName = async () => {
+    if (!newName.trim() || newName === user?.displayName) {
+      setIsEditingName(false);
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      await FirebaseService.updateDisplayName(newName);
+      setIsEditingName(false);
+    } catch (err) {
+      console.error('Failed to update name', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+
+  const handleSendVerification = async () => {
+    if (verificationSent) return;
+    setIsVerifying(true);
+    setVerificationError(null);
+    try {
+      await FirebaseService.sendVerification();
+      setVerificationSent(true);
+      setTimeout(() => setVerificationSent(false), 8000);
+    } catch (err: any) {
+      if (err.code === 'auth/too-many-requests') {
+        setVerificationError('Too many requests. Please wait a few minutes and try again.');
+      } else {
+        setVerificationError('Failed to send verification email.');
+      }
+      setTimeout(() => setVerificationError(null), 5000);
+      console.error('Failed to send verification', err);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleRefreshUser = async () => {
+    setIsVerifying(true);
+    try {
+      await FirebaseService.reloadUser();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const isLoggedIn = !!user;
 
   return (
     <div className="w-full h-full flex flex-col md:flex-row gap-6 p-6 overflow-y-auto text-slate-100">
@@ -93,36 +152,131 @@ export function UserProfileDashboard({ stats, isLoggedIn, onLoginToggle }: Props
       {/* Right Column: Personas & Achievements */}
       <div className="w-full md:w-80 flex flex-col gap-6 shrink-0">
         
-        {/* Cloud Sync Widget */}
+        {/* User Profile & Cloud Sync Widget */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <CloudUpload className="w-4 h-4 text-cyan-400" />
-            Cloud Sync & Global Rank
-          </h2>
-          {isLoggedIn ? (
-            <div className="flex flex-col gap-3">
-              <div className="text-sm text-emerald-400 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Data sync is active
-              </div>
-              <button 
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <CloudUpload className="w-4 h-4 text-cyan-400" />
+              UserProfile & Sync
+            </h2>
+            {isLoggedIn && (
+               <button 
                 onClick={onLoginToggle}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-lg transition-colors border border-slate-700"
+                className="text-xs text-slate-500 hover:text-red-400 font-bold transition-colors"
               >
                 Sign Out
               </button>
+            )}
+          </div>
+
+          {isLoggedIn ? (
+            <div className="flex flex-col gap-4">
+              {/* Profile Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xl overflow-hidden">
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-6 h-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {isEditingName ? (
+                      <div className="flex items-center gap-1 w-full">
+                        <input 
+                          type="text"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          className="bg-slate-950 border border-cyan-500/50 rounded px-2 py-0.5 text-sm w-full outline-none"
+                          autoFocus
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateName()}
+                        />
+                        <button onClick={handleUpdateName} disabled={isUpdating} className="p-1 text-emerald-400">
+                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        </button>
+                        <button onClick={() => setIsEditingName(false)} className="p-1 text-slate-500">
+                          <CloseIcon className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-bold text-slate-200 truncate">{user?.displayName || 'Anonymous Player'}</span>
+                        <button 
+                          onClick={() => {
+                            setNewName(user?.displayName || '');
+                            setIsEditingName(true);
+                          }}
+                          className="p-1 text-slate-500 hover:text-cyan-400 transition-colors"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">{user?.email}</div>
+                </div>
+              </div>
+
+              {/* Verification & Sync Status */}
+              <div className="space-y-2">
+                {/* Email Verification */}
+                {!user?.emailVerified && user?.providerData[0]?.providerId === 'password' && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
+                    <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-amber-200 mb-1">Email not verified</div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={handleSendVerification}
+                          disabled={isVerifying || verificationSent}
+                          className="text-[10px] font-bold text-amber-500 hover:text-amber-400 underline disabled:opacity-50"
+                        >
+                          {verificationSent ? 'Sent!' : 'Verify Now'}
+                        </button>
+                        <span className="text-[10px] text-slate-600">|</span>
+                        <button 
+                          onClick={handleRefreshUser}
+                          className="text-[10px] font-bold text-slate-500 hover:text-slate-400 flex items-center gap-1"
+                        >
+                          <RefreshCw className={cn("w-2 h-2", isVerifying && "animate-spin")} />
+                          Refresh
+                        </button>
+                      </div>
+                      {verificationError && (
+                        <div className="text-[9px] text-red-400 mt-1 font-medium animate-pulse">
+                          {verificationError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {user?.emailVerified && (
+                  <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-tighter">Verified Account</span>
+                  </div>
+                )}
+
+                {/* Data Sync Status */}
+                <div className="text-[10px] text-slate-500 flex items-center gap-2 px-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Cloud synchronization active
+                </div>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-400 leading-relaxed">
-                Sign in to sync your progress across devices and join the global acoustic mastery leaderboard.
+                Sign in to sync your progress across devices and join the global leaderboard.
               </p>
               <button 
                 onClick={onLoginToggle}
-                className="w-full py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
+                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 active:scale-95"
               >
                 <User className="w-4 h-4" />
-                Sign In with Google
+                Sign In / Sign Up
               </button>
             </div>
           )}

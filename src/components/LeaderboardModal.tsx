@@ -157,7 +157,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
                 onClick={onLogin}
                 className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-cyan-500/20"
               >
-                Sign In with Google
+                Sign In
               </button>
             </div>
           ) : (

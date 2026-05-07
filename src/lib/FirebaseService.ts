@@ -14,7 +14,7 @@ import {
   getDocs,
   serverTimestamp
 } from 'firebase/firestore';
-import { auth, db, signInWithGoogle } from './firebase';
+import { auth, db, signInWithGoogle, signInWithEmailAndPassword, sendPasswordResetEmail } from './firebase';
 import { PlayerStats } from './PlayerProfileManager';
 
 export interface LeaderboardEntry {
@@ -34,6 +34,47 @@ export class FirebaseService {
 
   static async login() {
     return await signInWithGoogle();
+  }
+
+  static async loginWithEmail(email: string, pass: string) {
+    return await signInWithEmailAndPassword(auth, email, pass);
+  }
+
+  static async registerWithEmail(email: string, pass: string) {
+    const { createUserWithEmailAndPassword, sendEmailVerification } = await import('firebase/auth');
+    const result = await createUserWithEmailAndPassword(auth, email, pass);
+    await sendEmailVerification(result.user);
+    return result.user;
+  }
+
+  static async sendVerification() {
+    const { sendEmailVerification } = await import('firebase/auth');
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+    }
+  }
+
+  static async reloadUser() {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      return auth.currentUser;
+    }
+    return null;
+  }
+
+  static async updateDisplayName(name: string) {
+    const { updateProfile } = await import('firebase/auth');
+    if (auth.currentUser) {
+      await updateProfile(auth.currentUser, { displayName: name });
+      // 同时更新 Firestore
+      const stats = (await import('./PlayerProfileManager')).PlayerProfileManager.loadStats();
+      const records = (await import('./ProgressionManager')).ProgressionManager.getRecords();
+      await this.syncUserData(stats, records);
+    }
+  }
+
+  static async resetPassword(email: string) {
+    return await sendPasswordResetEmail(auth, email);
   }
 
   static async logout() {

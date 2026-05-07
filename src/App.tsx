@@ -9,6 +9,7 @@ import StarsBackground from './components/StarsBackground';
 import { LevelCarousel } from './components/LevelCarousel';
 import { CalibrationSettings } from './components/CalibrationEditor';
 import { LeaderboardModal } from './components/LeaderboardModal';
+import { LoginModal } from './components/LoginModal';
 
 import { UserProfileDashboard } from './components/UserProfileDashboard';
 import { PlayerProfileManager } from './lib/PlayerProfileManager';
@@ -33,6 +34,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
@@ -170,16 +172,8 @@ export default function App() {
   const highestUnlocked = Math.max(1, ...passedLevels.map((l) => l + 1));
   const masteryScore = Object.values(records).reduce((sum: number, r: any) => sum + (r.score || 0), 0);
 
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
   const handleLogin = async () => {
-    if (isLoggingIn) return;
-    setIsLoggingIn(true);
-    try {
-      await FirebaseService.login();
-    } finally {
-      setIsLoggingIn(false);
-    }
+    setIsLoginOpen(true);
   };
 
   const handleLogout = async () => {
@@ -241,6 +235,8 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
       
       {showPeakCongratulation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -404,7 +400,7 @@ export default function App() {
             <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden">
               <UserProfileDashboard 
                 stats={PlayerProfileManager.loadStats()} 
-                isLoggedIn={!!user}
+                user={user}
                 onLoginToggle={() => user ? handleLogout() : handleLogin()}
               />
             </div>
