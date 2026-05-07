@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and cumulative stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "stats": { "$ref": "PlayerStats" },
+        "records": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "stats"]
+    },
+    "PlayerStats": {
+      "title": "PlayerStats",
+      "description": "EQ training statistics",
+      "type": "object",
+      "properties": {
+        "levelsPlayed": { "type": "number" },
+        "levelsCompleted": { "type": "number" },
+        "totalStars": { "type": "number" },
+        "totalTimeSpent": { "type": "number" },
+        "retriesCount": { "type": "number" },
+        "totalFreqError": { "type": "number" },
+        "totalQError": { "type": "number" },
+        "totalGainError": { "type": "number" },
+        "extremeGainCount": { "type": "number" },
+        "totalUserQSum": { "type": "number" },
+        "totalSweepEvents": { "type": "number" }
+      }
+    },
+    "Score": {
+      "title": "Score",
+      "description": "Entry for global ranking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "masteryScore": { "type": "number" },
+        "ami": { "type": "number" },
+        "levelsCompleted": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "masteryScore", "ami"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user data"
+    },
+    "/leaderboard/{userId}": {
+      "schema": "Score",
+      "description": "Public leaderboard entry"
+    }
+  }
+}

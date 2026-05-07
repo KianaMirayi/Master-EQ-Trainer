@@ -74,6 +74,26 @@ export class PlayerProfileManager {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
   }
 
+  static mergeStats(cloudStats: PlayerStats) {
+    const local = this.loadStats();
+    const merged: PlayerStats = {
+      ...local,
+      levelsPlayed: Math.max(local.levelsPlayed, cloudStats.levelsPlayed),
+      levelsCompleted: Math.max(local.levelsCompleted, cloudStats.levelsCompleted),
+      totalStars: Math.max(local.totalStars, cloudStats.totalStars),
+      totalTimeSpent: Math.max(local.totalTimeSpent, cloudStats.totalTimeSpent),
+      retriesCount: Math.max(local.retriesCount, cloudStats.retriesCount),
+      totalFreqError: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalFreqError : local.totalFreqError,
+      totalQError: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalQError : local.totalQError,
+      totalGainError: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalGainError : local.totalGainError,
+      totalUserQSum: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalUserQSum : local.totalUserQSum,
+      totalSweepEvents: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalSweepEvents : local.totalSweepEvents,
+      extremeGainCount: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.extremeGainCount : local.extremeGainCount,
+    };
+    this.saveStats(merged);
+    return merged;
+  }
+
   static resetStats() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_STATS));
   }

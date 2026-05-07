@@ -58,6 +58,24 @@ export class ProgressionManager {
     return isNewBest;
   }
 
+  static mergeRecords(cloudRecords: Record<number, LevelRecord>) {
+    const local = this.getRecords();
+    const merged = { ...local };
+    
+    Object.keys(cloudRecords).forEach(k => {
+      const level = parseInt(k);
+      const cloud = cloudRecords[level];
+      const existing = merged[level];
+      
+      if (!existing || cloud.score > existing.score) {
+        merged[level] = cloud;
+      }
+    });
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    return merged;
+  }
+
   /**
    * Gets the score required to pass a specific level.
    */

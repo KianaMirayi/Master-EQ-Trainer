@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug } from 'lucide-react';
 import { EQNodeData, cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
@@ -12,6 +12,8 @@ import { LeaderboardModal } from './components/LeaderboardModal';
 
 import { UserProfileDashboard } from './components/UserProfileDashboard';
 import { PlayerProfileManager } from './lib/PlayerProfileManager';
+import { FirebaseService } from './lib/FirebaseService';
+import { User as FirebaseUser } from 'firebase/auth';
 
 interface LevelScore {
   level: number;
@@ -31,7 +33,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<'main' | 'audio'>('main');
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
   const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
@@ -41,6 +43,24 @@ export default function App() {
     setUploadMessage({ text, type });
     setTimeout(() => setUploadMessage(null), 3000);
   };
+
+  // Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = FirebaseService.onAuthChange(async (user) => {
+      setUser(user);
+      if (user) {
+        const cloudData = await FirebaseService.getUserData(user.uid) as any;
+        if (cloudData) {
+          if (cloudData.stats) PlayerProfileManager.mergeStats(cloudData.stats);
+          if (cloudData.records) {
+            ProgressionManager.mergeRecords(cloudData.records);
+            setRecords(ProgressionManager.getRecords());
+          }
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Load from local storage and initialize indexedDB
   useEffect(() => {
@@ -134,9 +154,16 @@ export default function App() {
   };
 
   // Save to local storage
-  const saveScore = (level: number, score: number, stars: number) => {
+  const saveScore = async (level: number, score: number, stars: number) => {
     ProgressionManager.saveRecord(level, score, stars);
     setRecords(ProgressionManager.getRecords());
+    
+    // Sync to Firebase if logged in
+    if (user) {
+      const stats = PlayerProfileManager.loadStats();
+      const records = ProgressionManager.getRecords();
+      await FirebaseService.syncUserData(stats, records);
+    }
   };
 
   const passedLevels = Object.keys(records).map(Number).filter((l) => records[l].passed);
@@ -192,8 +219,8 @@ export default function App() {
         {isLeaderboardOpen && (
           <LeaderboardModal 
             onClose={() => setIsLeaderboardOpen(false)} 
-            isLoggedIn={isLoggedIn} 
-            onLogin={() => setIsLoggedIn(true)} 
+            isLoggedIn={!!user} 
+            onLogin={() => FirebaseService.login()} 
             masteryScore={masteryScore} 
           />
         )}
@@ -361,8 +388,8 @@ export default function App() {
             <div className="flex-1 w-full max-w-6xl mx-auto overflow-hidden">
               <UserProfileDashboard 
                 stats={PlayerProfileManager.loadStats()} 
-                isLoggedIn={isLoggedIn}
-                onLoginToggle={() => setIsLoggedIn(!isLoggedIn)}
+                isLoggedIn={!!user}
+                onLoginToggle={() => user ? FirebaseService.logout() : FirebaseService.login()}
               />
             </div>
           </motion.div>
@@ -412,16 +439,24 @@ export default function App() {
               <div className="w-px h-8 bg-slate-800"></div>
               <div className="px-4 py-2 flex flex-col items-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">AMI Score</span>
-                <span className="text-xl font-mono font-bold text-emerald-400">{isLoggedIn ? "9500" : "-"}</span> 
+                <span className="text-xl font-mono font-bold text-emerald-400">{user ? "9500" : "-"}</span> 
               </div>
             </button>
             
             <button 
               onClick={() => setCurrentView('profile')}
-              className={cn("p-3.5 border rounded-xl transition shadow-sm", isLoggedIn ? "bg-cyan-900/20 border-cyan-800 text-cyan-400 hover:bg-cyan-900/40" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
-              title={isLoggedIn ? "Player Profile" : "Sign In / Profile"}
+              className={cn("p-3.5 border rounded-xl transition shadow-sm", user ? "bg-cyan-900/20 border-cyan-800 text-cyan-400 hover:bg-cyan-900/40" : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800")}
+              title={user ? "Player Profile" : "Sign In / Profile"}
             >
-              {isLoggedIn ? <User className="w-5 h-5" /> : <User className="w-5 h-5 opacity-50" />}
+              {user ? (
+                user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-5 h-5 rounded-full" />
+                ) : (
+                  <User className="w-5 h-5" />
+                )
+              ) : (
+                <User className="w-5 h-5 opacity-50" />
+              )}
             </button>
             
             <button 
@@ -770,22 +805,16 @@ export default function App() {
             <div className="p-6 border-t border-slate-800 bg-slate-900 mt-auto">
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-slate-400">Test Environment</span>
-                <select 
-                  className="bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded-md px-3 py-2 outline-none focus:border-cyan-500 w-full"
-                  onChange={(e) => {
-                     const lvl = parseInt(e.target.value);
-                     if (!isNaN(lvl)) {
-                        setIsSettingsOpen(false);
-                        handleLevelSelect(lvl, true);
-                     }
+                <button 
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    handleLevelSelect(1, true);
                   }}
-                  value=""
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 text-sm font-bold rounded-lg transition-colors border border-slate-700 flex items-center justify-center gap-2"
                 >
-                  <option value="" disabled>Select Core Level (1-100)...</option>
-                  {Array.from({ length: 100 }, (_, i) => i + 1).map(l => (
-                     <option key={l} value={l}>Level {l}</option>
-                  ))}
-                </select>
+                  <Bug className="w-4 h-4" />
+                  Enter Test Mode
+                </button>
               </div>
             </div>
           )}
