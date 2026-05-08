@@ -908,8 +908,11 @@ export default function App() {
                   <label className="flex items-center justify-between text-sm text-slate-400 mb-2">
                     <span>{t('custom_tracks')}</span>
                   </label>
-                  <p className="text-xs text-slate-500 mb-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
+                  <p className="text-xs text-slate-500 mb-2 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
                     {t('custom_track_desc')}
+                  </p>
+                  <p className="text-[10px] text-amber-500/80 mb-3 px-2 italic">
+                    * {t('custom_track_notice')}
                   </p>
                   <div 
                     className="max-h-48 overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-lg p-1.5 space-y-1 custom-scrollbar mb-3 relative"

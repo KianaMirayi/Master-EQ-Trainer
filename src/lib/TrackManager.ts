@@ -13,11 +13,7 @@ export interface Track {
 
 export const BUILT_IN_TRACKS: Track[] = [
     { id: 'builtin-1', name: 'Emotional Soul', artist: 'Dvir Silverstone', url: '/built-in/Emotional Soul.mp3', isCustom: false },
-    { id: 'builtin-2', name: 'End of Summer-The 126ers', artist: 'The 126ers', url: '/built-in/End of Summer.mp3', isCustom: false },
     { id: 'builtin-3', name: 'Funk Power', artist: 'Aleksandr', url: '/built-in/Funk Power.mp3', isCustom: false },
-    { id: 'builtin-4', name: 'Moving On', artist: 'Wayne Jones', url: '/built-in/Moving On.mp3', isCustom: false },
-    { id: 'builtin-5', name: 'My Sad Old Heart', artist: 'The 126ers', url: '/built-in/My Sad Old Heart.mp3', isCustom: false },
-    { id: 'builtin-6', name: 'On My Way Home', artist: 'The 126ers', url: '/built-in/On My Way Home.mp3', isCustom: false },
     { id: 'builtin-7', name: 'Hold On', artist: 'Prismo', url: '/built-in/Hold On.mp3', isCustom: false },
     { id: 'builtin-8', name: 'Sad', artist: 'Nikita Kondrashev', url: '/built-in/Sad.mp3', isCustom: false },
     { id: 'builtin-9', name: 'Sock Hop', artist: 'Kevin MacLeod', url: '/built-in/Sock Hop.mp3', isCustom: false },
@@ -40,26 +36,38 @@ export class TrackManager {
             const storedV2 = await get(STORE_KEY);
             if (storedV2 && Array.isArray(storedV2)) {
                 let needsMigration = false;
-                this.customTracks = await Promise.all(storedV2.map(async (item: any) => {
+                let validTracks: Track[] = [];
+
+                for (const item of storedV2) {
+                    // Check if file still exists (blobs can be cleared by browser cleanup)
+                    if (!item.file || !(item.file instanceof Blob)) {
+                        console.warn(`TrackManager: Custom track ${item.name} lost its audio file, removing...`);
+                        needsMigration = true;
+                        continue;
+                    }
+
                     let coverArt = item.coverArt;
-                    // If cover art is suspicious of being too large (e.g. > 100KB in base64)
+                    // If cover art is suspicious of being too large (e.g. > 130000 chars in base64)
                     if (coverArt && coverArt.length > 130000) {
                         console.log(`TrackManager: Found large cover art for ${item.name}, resizing...`);
-                        coverArt = await this.resizeImage(coverArt);
+                        coverArt = await TrackManager.resizeImage(coverArt);
                         needsMigration = true;
                     }
-                    return {
+
+                    validTracks.push({
                         id: item.id,
                         name: item.name,
                         file: item.file,
                         isCustom: true,
                         artist: item.artist,
                         coverArt: coverArt
-                    };
-                }));
+                    });
+                }
+
+                this.customTracks = validTracks;
 
                 if (needsMigration) {
-                    console.log("TrackManager: Saving migrated (resized) tracks back to storage");
+                    console.log("TrackManager: Saving cleaned/migrated tracks back to storage");
                     await set(STORE_KEY, this.customTracks.map(t => ({
                         id: t.id,
                         name: t.name,
@@ -144,7 +152,7 @@ export class TrackManager {
                         coverArt = `data:${picture.format};base64,${window.btoa(base64String)}`;
                     }
                     if (coverArt) {
-                        this.resizeImage(coverArt).then(resized => {
+                        TrackManager.resizeImage(coverArt).then(resized => {
                              resolve({
                                 title: tag.tags.title,
                                 artist: tag.tags.artist,
