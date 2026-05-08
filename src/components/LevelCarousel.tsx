@@ -45,6 +45,7 @@ interface LevelCarouselProps {
   levels: number[];
   records: Record<number, { passed: boolean; score: number; stars: number; trackId?: string }>;
   onSelectLevel: (level: number) => void;
+  initialLevel?: number;
   tiltX?: number;
   tiltY?: number;
   tiltZ?: number;
@@ -58,6 +59,7 @@ export function LevelCarousel({
   levels, 
   records, 
   onSelectLevel,
+  initialLevel,
   tiltX = 3,
   tiltY = 90,
   tiltZ = 13,
@@ -72,9 +74,21 @@ export function LevelCarousel({
   const wheelAccumulator = useRef<number>(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const panAccumulator = useRef<number>(0);
+  const hasInitialized = useRef(false);
 
-  // Focus on the highest unlocked level by default
+  // Focus on the highest unlocked level or initialLevel
   useEffect(() => {
+    if (initialLevel !== undefined) {
+      const idx = levels.indexOf(initialLevel);
+      if (idx !== -1) {
+        setCurrentIndex(idx);
+        hasInitialized.current = true;
+        return;
+      }
+    }
+
+    if (hasInitialized.current && Object.keys(records).length > 0) return;
+
     let maxUnlocked = 0;
     for (let i = 0; i < levels.length; i++) {
         if (ProgressionManager.checkEnterLevel(levels[i]).allowed) {
@@ -92,7 +106,8 @@ export function LevelCarousel({
         }
     }
     setCurrentIndex(target);
-  }, []);
+    if (Object.keys(records).length > 0) hasInitialized.current = true;
+  }, [initialLevel, records, levels]);
 
   const handlePan = (e: any, info: any) => {
     panAccumulator.current += info.delta.x;

@@ -34,7 +34,9 @@ export default function App() {
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const [records, setRecords] = useState<Record<number, LevelRecord>>({});
   const [tracks, setTracks] = useState({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
-  const [selectedTrackId, setSelectedTrackId] = useState<string>('random-builtin');
+  const [selectedTrackId, setSelectedTrackId] = useState<string>(() => {
+    return localStorage.getItem('last-selected-track') || 'random-builtin';
+  });
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -74,8 +76,12 @@ export default function App() {
           if (cloudData) {
             if (cloudData.stats) PlayerProfileManager.mergeStats(cloudData.stats);
             if (cloudData.records) {
-              ProgressionManager.mergeRecords(cloudData.records);
-              setRecords(ProgressionManager.getRecords());
+              const mergedRecords = ProgressionManager.mergeRecords(cloudData.records);
+              setRecords(mergedRecords);
+              
+              // Only auto-jump if we are currently at level 1 or if we are just starting
+              const latest = getLatestUnlockedLevel(mergedRecords);
+              setActiveLevel(latest);
             }
             if (cloudData.calibrationPresets) {
               CalibrationManager.mergePresets(cloudData.calibrationPresets);
@@ -99,10 +105,50 @@ export default function App() {
   // Load from local storage and initialize indexedDB
   useEffect(() => {
     TrackManager.init().then(() => {
-      setTracks({ builtIn: TrackManager.getBuiltInTracks(), custom: TrackManager.getCustomTracks() });
+      const builtIn = TrackManager.getBuiltInTracks();
+      const custom = TrackManager.getCustomTracks();
+      setTracks({ builtIn, custom });
+      
+      // Validate last selected track
+      const lastSelected = localStorage.getItem('last-selected-track');
+      if (lastSelected) {
+        const allTracks = [...builtIn, ...custom];
+        const exists = allTracks.some(t => t.id === lastSelected) || 
+                       ['random', 'random-builtin', 'random-custom'].includes(lastSelected);
+        
+        if (!exists || (lastSelected === 'random-custom' && custom.length === 0)) {
+          setSelectedTrackId('random-builtin');
+        } else {
+          setSelectedTrackId(lastSelected);
+        }
+      }
     });
-    setRecords(ProgressionManager.getRecords());
+    
+    const initialRecords = ProgressionManager.getRecords();
+    setRecords(initialRecords);
+    
+    // Auto-select latest unlocked level on first load
+    const latest = getLatestUnlockedLevel(initialRecords);
+    setActiveLevel(latest);
   }, []);
+
+  const getLatestUnlockedLevel = (records: Record<number, LevelRecord>) => {
+    let latest = 1;
+    for (let i = 1; i <= 100; i++) {
+       const record = records[i];
+       if (record && record.passed) {
+         latest = i + 1;
+       } else {
+         break;
+       }
+    }
+    return Math.min(latest, 100);
+  };
+
+  // Persist track selection
+  useEffect(() => {
+    localStorage.setItem('last-selected-track', selectedTrackId);
+  }, [selectedTrackId]);
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>, droppedFiles?: FileList) => {
     let files = droppedFiles || ('files' in e.target ? (e.target as HTMLInputElement).files : null);
@@ -590,6 +636,7 @@ export default function App() {
                  levels={levelsParams} 
                  records={records} 
                  onSelectLevel={handleLevelSelect}
+                 initialLevel={activeLevel}
                  offsetY={carouselOffsetY}
                  indicatorOffsetY={carouselIndicatorOffsetY}
                />

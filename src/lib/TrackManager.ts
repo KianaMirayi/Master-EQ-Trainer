@@ -12,13 +12,16 @@ export interface Track {
 }
 
 export const BUILT_IN_TRACKS: Track[] = [
-    { id: 'builtin-1', name: 'Da Capo', artist: 'HOYO-MiX', url: '/built-in/Da Capo - HOYO-MiX.mp3', isCustom: false },
-    { id: 'builtin-2', name: 'Had I Not Seen the Sun', artist: 'HOYO-MiX', url: '/built-in/Had I Not Seen the Sun.mp3', isCustom: false },
-    { id: 'builtin-3', name: 'If I can Stop One Heart From Breaking', artist: 'HOYO-MiX', url: '/built-in/If I can Stop One Heart From Breaking.mp3', isCustom: false },
-    { id: 'builtin-4', name: 'Hope Is the Thing With Feathers', artist: 'HOYO-MiX', url: '/built-in/Hope Is the Thing With Feathers.mp3', isCustom: false },
-    { id: 'builtin-5', name: 'Sway to My Beat in Cosmos', artist: 'HOYO-MiX', url: '/built-in/Sway to My Beat in Cosmos.mp3', isCustom: false },
-    { id: 'builtin-6', name: 'prettyjohn1', artist: 'prettyjohn1', url: '/built-in/prettyjohn1.mp3', isCustom: false },
-    { id: 'builtin-7', name: '昔涟', artist: 'HOYO-MiX/张韶涵', url: '/built-in/昔涟.mp3', isCustom: false },
+    { id: 'builtin-1', name: 'Emotional Soul', artist: 'Dvir Silverstone', url: '/built-in/Emotional Soul.mp3', isCustom: false },
+    { id: 'builtin-2', name: 'End of Summer-The 126ers', artist: 'The 126ers', url: '/built-in/End of Summer-The 126ers.mp3', isCustom: false },
+    { id: 'builtin-3', name: 'Funk Power', artist: 'Aleksandr', url: '/built-in/Funk Power.mp3', isCustom: false },
+    { id: 'builtin-4', name: 'Moving On', artist: 'Wayne Jones', url: '/built-in/Moving On-Wayne Jones.mp3', isCustom: false },
+    { id: 'builtin-5', name: 'My Sad Old Heart', artist: 'The 126ers', url: '/built-in/My Sad Old Heart-The 126ers.mp3', isCustom: false },
+    { id: 'builtin-6', name: 'On My Way Home', artist: 'The 126ers', url: '/built-in/On My Way Home-The 126ers.mp3', isCustom: false },
+    { id: 'builtin-7', name: 'Hold On', artist: 'Prismo', url: '/built-in/Prismo - Hold On.mp3', isCustom: false },
+    { id: 'builtin-8', name: 'Sad', artist: 'Nikita Kondrashev', url: '/built-in/Sad.mp3', isCustom: false },
+    { id: 'builtin-9', name: 'Sock Hop', artist: 'Kevin MacLeod', url: '/built-in/Sock Hop.mp3', isCustom: false },
+    { id: 'builtin-10', name: 'Vacation', artist: 'Aleksandr', url: '/built-in/Vacation.mp3', isCustom: false },
 ];
 
 const STORE_KEY = 'custom-tracks-v2';
