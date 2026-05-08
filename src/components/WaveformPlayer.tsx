@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import LoaderAnimation from './LoaderAnimation';
 
 interface WaveformPlayerProps {
-  engine: AudioEngine;
+  engine: AudioEngine | null;
   isLoadingTrack?: boolean;
   trackName?: string;
   trackArtist?: string;
@@ -15,12 +15,12 @@ interface WaveformPlayerProps {
 export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt }: WaveformPlayerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(engine.isPlaying);
-  const [isLooping, setIsLooping] = useState(engine.isLooping);
+  const [isPlaying, setIsPlaying] = useState(engine?.isPlaying || false);
+  const [isLooping, setIsLooping] = useState(engine?.isLooping || false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [loopStart, setLoopStart] = useState(engine.loopStart);
-  const [loopEnd, setLoopEnd] = useState(engine.loopEnd);
+  const [loopStart, setLoopStart] = useState(engine?.loopStart || 0);
+  const [loopEnd, setLoopEnd] = useState(engine?.loopEnd || 0);
   
   const [isDraggingLoop, setIsDraggingLoop] = useState(false);
   const [dragStartRatio, setDragStartRatio] = useState(0);
@@ -42,6 +42,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   // Global Spacebar for play/pause
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!engine) return;
       // Don't intercept if typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
       if (e.code === 'Space') {
@@ -59,6 +60,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
 
   // Poll for time and state updates
   useEffect(() => {
+    if (!engine) return;
     let frameId: number;
     const update = () => {
       setIsPlaying(engine.isPlaying);
@@ -84,7 +86,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
 
   // Draw Waveform (Static Only)
   useEffect(() => {
-    if (!containerRef.current || !canvasRef.current || !engine.buffer) return;
+    if (!containerRef.current || !canvasRef.current || !engine || !engine.buffer) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -171,6 +173,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   }, [currentTime, isLooping, loopStart, loopEnd, duration, dimensions.width]);
 
   const togglePlay = () => {
+      if (!engine) return;
       if (engine.isPlaying) {
           engine.pause();
       } else {
@@ -179,6 +182,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   };
 
   const toggleLoop = () => {
+      if (!engine) return;
       engine.toggleLoop(!isLooping);
   };
 
@@ -190,7 +194,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-      if (!duration) return;
+      if (!engine || !duration) return;
       const time = xToTime(e.clientX);
       if (e.altKey || e.shiftKey) {
           // Alt/Shift drag to set loop
@@ -206,7 +210,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-      if (!duration) return;
+      if (!engine || !duration) return;
       const time = xToTime(e.clientX);
       
       if (draggingHandle === 'start') {

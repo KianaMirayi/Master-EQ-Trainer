@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug, PlayCircle } from 'lucide-react';
 import { EQNodeData, cn } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
 import StarsBackground from './components/StarsBackground';
 import { LevelCarousel } from './components/LevelCarousel';
 import { CalibrationSettings } from './components/CalibrationEditor';
+import { FreeTrainingView } from './components/FreeTrainingView';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { LoginModal } from './components/LoginModal';
 
@@ -27,7 +28,7 @@ import { useLanguage } from './lib/LanguageContext';
 
 export default function App() {
   const { t, language, setLanguage } = useLanguage();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile' | 'free_training'>('dashboard');
   const [dashboardMode, setDashboardMode] = useState<'grid' | 'carousel'>('carousel');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
@@ -399,6 +400,22 @@ export default function App() {
           </motion.div>
         )}
 
+        {currentView === 'free_training' && (
+          <motion.div
+            key="free_training"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="absolute inset-0 z-20"
+          >
+            <FreeTrainingView 
+              selectedTrackId={selectedTrackId}
+              onBack={() => setCurrentView('dashboard')} 
+            />
+          </motion.div>
+        )}
+
         {currentView === 'calibration' && (
           <motion.div
             key="calibration"
@@ -527,6 +544,14 @@ export default function App() {
               </div>
               
               <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setCurrentView('free_training')}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition group"
+                >
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-medium">{t('free_training')}</span>
+                </button>
+
                 <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1">
                    <button 
                      onClick={() => setDashboardMode('carousel')}
@@ -742,6 +767,25 @@ export default function App() {
                     <div>
                       <h3 className="font-medium text-slate-200">{t('hp_calibration')}</h3>
                       <p className="text-sm text-slate-400 mt-0.5">{t('hp_calibration_desc')}</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                </button>
+
+                <button 
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    setCurrentView('free_training');
+                  }}
+                  className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500/20 group-hover:text-emerald-300 transition-colors">
+                      <PlayCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-slate-200">{t('free_training')}</h3>
+                      <p className="text-sm text-slate-400 mt-0.5">{t('free_training_desc')}</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />

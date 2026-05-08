@@ -1,5 +1,6 @@
 import { EQNodeData } from './utils';
 import levelsData from './levels.json';
+import { FreeTrainingConfig } from '../types/freeTraining';
 
 export interface LevelConfig {
   nodeDistribution: { 
@@ -43,9 +44,40 @@ export const GROUP_POOLS: Record<string, string[]> = {
   C: ['CA', 'CB']
 };
 
+const FREE_TRAINING_POOLS: Record<string, [number, number]> = {
+  AA: [20, 20000],
+  AB: [20, 150],
+  AC: [150, 1000],
+  AD: [1000, 5000],
+  AE: [5000, 20000],
+  AF: [20, 1000],
+  AG: [1000, 20000]
+};
+
 export class LevelManager {
   
-  static getLevelConfig(level: number): LevelConfig {
+  static getLevelConfig(level: number, freeConfig?: FreeTrainingConfig): LevelConfig {
+    if (freeConfig) {
+      const allowedFilters = freeConfig.allowedFilters;
+      const weights: Record<string, number> = {};
+      allowedFilters.forEach(f => weights[f] = 1 / allowedFilters.length);
+
+      return {
+        nodeDistribution: {
+          stereo: freeConfig.soundModeDist.stereo,
+          mid: 0,
+          side: freeConfig.soundModeDist.ms // Using 'side' for M/S as per existing logic if needed
+        },
+        allowedFilters,
+        filterWeights: weights,
+        freqPools: freeConfig.freqPools,
+        gainRange: freeConfig.gainRange,
+        qRange: freeConfig.qRange,
+        showGainHint: freeConfig.enableGainHint,
+        constrainBounds: freeConfig.enableFreqLimits
+      };
+    }
+
     const levelsArr = levelsData.levels;
     const configData = levelsArr.find(d => level >= d.levels[0] && level <= d.levels[1]) || levelsArr[levelsArr.length - 1];
     
@@ -74,13 +106,15 @@ export class LevelManager {
     };
   }
 
-  static generateLevelTargets(level: number): { targets: EQNodeData[], netGain: number } {
-    const config = this.getLevelConfig(level);
+  static generateLevelTargets(level: number, freeConfig?: FreeTrainingConfig): { targets: EQNodeData[], netGain: number } {
+    const config = this.getLevelConfig(level, freeConfig);
     const nodes: EQNodeData[] = [];
 
     // Make a copy of allowed pools to draw from
     let availablePools = [...config.freqPools];
-    if (availablePools.length === 0) availablePools = Object.keys(SUB_POOLS); // fallback
+    const poolData = freeConfig ? FREE_TRAINING_POOLS : SUB_POOLS;
+    
+    if (availablePools.length === 0) availablePools = Object.keys(poolData); // fallback
 
     const modesToGenerate: Array<'Stereo' | 'Mid' | 'Side'> = [
         ...Array(config.nodeDistribution.stereo).fill('Stereo'),
@@ -115,13 +149,13 @@ export class LevelManager {
             attempts++;
             let minF = 200, maxF = 500;
 
-            if (stereoMode === 'Mid') {
-                // Rule 2 for Mid: Force from 100-500Hz
+            if (stereoMode === 'Mid' && !freeConfig) {
+                // Rule 2 for Mid: Force from 100-500Hz (Original Journey Mode)
                 minF = 100;
                 maxF = 500;
                 pName = 'Mid';
-            } else if (stereoMode === 'Side') {
-                // Rule 2 for Side: Force from 6k-16kHz
+            } else if (stereoMode === 'Side' && !freeConfig) {
+                // Rule 2 for Side: Force from 6k-16kHz (Original Journey Mode)
                 minF = 6000;
                 if (typeCategory === 'shelf') {
                     maxF = 12000;
@@ -132,9 +166,9 @@ export class LevelManager {
             } else {
                 // pick a random pool
                 pName = availablePools[Math.floor(Math.random() * availablePools.length)];
-                [minF, maxF] = SUB_POOLS[pName] || [200, 500];
+                [minF, maxF] = poolData[pName] || [200, 500];
                 
-                if (pName === 'CB') {
+                if (pName === 'CB' && !freeConfig) {
                     if (typeCategory === 'shelf') {
                         maxF = 12000;
                     } else { // bell/peaking
@@ -236,8 +270,8 @@ export class LevelManager {
     return { targets: nodes, netGain };
   }
 
-  static generateUserInitial(targets: EQNodeData[], level: number): EQNodeData[] {
-      const config = this.getLevelConfig(level);
+  static generateUserInitial(targets: EQNodeData[], level: number, freeConfig?: FreeTrainingConfig): EQNodeData[] {
+      const config = this.getLevelConfig(level, freeConfig);
       
       const userNodes = targets.map((t, idx) => {
           let minF = 20;
