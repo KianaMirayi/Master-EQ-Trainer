@@ -42,11 +42,22 @@ export default function App() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [showDonationQR, setShowDonationQR] = useState(false);
+  const [randomDonationImg, setRandomDonationImg] = useState('/assets/donations/love.png');
   const [user, setUser] = useState<FirebaseUser | null>(null);
 
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
   const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
   const [uploadMessage, setUploadMessage] = useState<{ text: string, type: 'error' | 'info' | 'success' } | null>(null);
+
+  // Support section randomization
+  useEffect(() => {
+    if (isSupportOpen) {
+      const imgs = ['/assets/donations/love.png', '/assets/donations/beg.png'];
+      setRandomDonationImg(imgs[Math.floor(Math.random() * imgs.length)]);
+      setShowDonationQR(false);
+    }
+  }, [isSupportOpen]);
 
   const displayUploadMessage = (text: string, type: 'error' | 'info' | 'success') => {
     setUploadMessage({ text, type });
@@ -935,17 +946,42 @@ export default function App() {
                     className="space-y-4"
                   >
                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 text-center flex flex-col items-center gap-4">
-                       <div className="text-2xl">🧋</div>
                        <p className="text-xs text-amber-200/90 leading-relaxed font-medium">
                          {t('support_message')}
                        </p>
-                       <div className="bg-white p-1.5 rounded-lg shadow-xl shadow-amber-500/10">
-                         <img 
-                           src="/assets/donations/wechat_qr.png" 
-                           alt="WeChat Support" 
-                           className="w-32 h-32 object-contain rounded-sm"
-                           referrerPolicy="no-referrer"
-                         />
+                       
+                       <div className="flex flex-col items-center gap-4 w-full">
+                         {!showDonationQR ? (
+                           <>
+                             <div className="w-32 h-32 flex items-center justify-center bg-slate-950/40 rounded-xl border border-white/5 overflow-hidden">
+                               <img 
+                                 src={randomDonationImg} 
+                                 alt="Support" 
+                                 className="w-24 h-24 object-contain"
+                                 referrerPolicy="no-referrer"
+                               />
+                             </div>
+                             <button 
+                               onClick={() => setShowDonationQR(true)}
+                               className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 shadow-lg shadow-amber-500/20"
+                             >
+                               {language === 'zh' ? '展示' : 'Show'}
+                             </button>
+                           </>
+                         ) : (
+                           <motion.div 
+                             initial={{ opacity: 0, scale: 0.9 }}
+                             animate={{ opacity: 1, scale: 1 }}
+                             className="bg-white p-1.5 rounded-lg shadow-xl shadow-amber-500/10"
+                           >
+                             <img 
+                               src="/assets/donations/wechat_qr.png" 
+                               alt="WeChat Support" 
+                               className="w-32 h-32 object-contain rounded-sm"
+                               referrerPolicy="no-referrer"
+                             />
+                           </motion.div>
+                         )}
                        </div>
                     </div>
                     <button 
