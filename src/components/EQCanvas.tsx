@@ -164,6 +164,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [activeNodeIdx, setActiveNodeIdx] = useState<number | null>(null);
+  const activeNodeIdxRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeNodeIdxRef.current = activeNodeIdx;
+  }, [activeNodeIdx]);
   const [selectedNodeIdx, setSelectedNodeIdx] = useState<number | null>(null);
   const [hoveredNodeIdx, setHoveredNodeIdx] = useState<number | null>(null);
   const [fillHoverNodeIdx, setFillHoverNodeIdx] = useState<number | null>(null);
@@ -662,6 +666,33 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.strokeRect(0, yTop1, dimensions.width, yTop2 - yTop1);
           ctx.strokeRect(0, yBot1, dimensions.width, yBot2 - yBot1);
+      }
+
+      // --- Draw Frequency Limit Hints (Red Vertical Lines) ---
+      if (activeNodeIdxRef.current !== null) {
+          const node = userNodesRef.current[activeNodeIdxRef.current];
+          if (node) {
+              const drawLimitLine = (limitFreq: number, isAtLimit: boolean) => {
+                  const x = freqToX(limitFreq) * dimensions.width;
+                  ctx.beginPath();
+                  ctx.setLineDash([4, 4]);
+                  // If exactly at limit, show brighter red; if just dragging a restricted node, show very faint red
+                  ctx.strokeStyle = isAtLimit ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.15)';
+                  ctx.lineWidth = 1.5;
+                  ctx.moveTo(x, 0);
+                  ctx.lineTo(x, dimensions.height);
+                  ctx.stroke();
+                  ctx.setLineDash([]);
+              };
+
+              // Only show if the limit is "custom" (not the default 20-20k range)
+              if (node.minFreq !== undefined && node.minFreq > 21) {
+                  drawLimitLine(node.minFreq, node.freq <= node.minFreq + 0.1);
+              }
+              if (node.maxFreq !== undefined && node.maxFreq < 19990) {
+                  drawLimitLine(node.maxFreq, node.freq >= node.maxFreq - 0.1);
+              }
+          }
       }
 
       // --- Draw Spectrum ---
