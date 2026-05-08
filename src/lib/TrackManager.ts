@@ -31,7 +31,13 @@ export class TrackManager {
         
         console.log("TrackManager: Initializing storage...");
 
-        // Load custom tracks asynchronously
+        // 1. Load built-in tracks metadata in background (won't block UI)
+        // These are static and don't need to be saved back to storage
+        this.loadBuiltInMetadata().then(() => {
+            console.log("TrackManager: Built-in metadata loaded.");
+        });
+
+        // 2. Load custom tracks from IndexedDB
         try {
             const storedV2 = await get(STORE_KEY);
             if (storedV2 && Array.isArray(storedV2)) {
@@ -47,9 +53,15 @@ export class TrackManager {
                     }
 
                     let coverArt = item.coverArt;
-                    // If cover art is suspicious of being too large (e.g. > 130000 chars in base64)
+                    /**
+                     * COMPRESSION LOGIC EXPLANATION:
+                     * Image data URLs (Base64) can be huge (several MBs). 
+                     * Storing many of these in IndexedDB makes the app extremely slow to start.
+                     * We resize them to a small thumbnail (120x120) which is plenty for the UI.
+                     * This ONLY affects the cover image display, it NEVER touches the audio file.
+                     */
                     if (coverArt && coverArt.length > 130000) {
-                        console.log(`TrackManager: Found large cover art for ${item.name}, resizing...`);
+                        console.log(`TrackManager: Found large cover art for ${item.name}, resizing to optimize storage...`);
                         coverArt = await TrackManager.resizeImage(coverArt);
                         needsMigration = true;
                     }
@@ -93,6 +105,45 @@ export class TrackManager {
 
         this.isLoaded = true;
         console.log("TrackManager: Initialization complete.");
+    }
+
+    static async loadBuiltInMetadata(): Promise<void> {
+        try {
+            const promises = BUILT_IN_TRACKS.map(t => new Promise<void>((resolve) => {
+                if (!t.url) return resolve();
+                const absoluteUrl = new URL(t.url, window.location.origin).href;
+                jsmediatags.read(absoluteUrl, {
+                    onSuccess: function(tag) {
+                        let coverArt: string | undefined;
+                        const picture = tag.tags.picture;
+                        if (picture) {
+                            let base64String = "";
+                            for (let i = 0; i < picture.data.length; i++) {
+                                base64String += String.fromCharCode(picture.data[i]);
+                            }
+                            coverArt = `data:${picture.format};base64,${window.btoa(base64String)}`;
+                        }
+                        if (tag.tags.title) t.name = tag.tags.title;
+                        if (tag.tags.artist) t.artist = tag.tags.artist;
+                        if (coverArt) {
+                            TrackManager.resizeImage(coverArt).then(resized => {
+                                t.coverArt = resized;
+                                resolve();
+                            });
+                        } else {
+                            resolve();
+                        }
+                    },
+                    onError: function(error) {
+                        // Silent fail for built-in tags to avoid console noise if files are missing
+                        resolve();
+                    }
+                });
+            }));
+            await Promise.all(promises);
+        } catch (e) {
+            console.warn("TrackManager: Failed to fetch built-in metadata", e);
+        }
     }
 
     static async resizeImage(dataUrl: string, maxWidth = 120, maxHeight = 120): Promise<string> {
