@@ -3,7 +3,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ProgressionManager } from '../lib/ProgressionManager';
+import { getLevelInfo } from '../lib/LevelUtils';
 import { useLanguage } from '../lib/LanguageContext';
+
+/**
+ * UI Parameters for the Level Information Display (Frosted Glass Effect)
+ * You can adjust these parameters to change the appearance of the level details panel.
+ */
+const INFO_PANEL_PARAMS = {
+  // Background color and opacity (Tailwind classes)
+  background: "bg-slate-850/65",
+  // Blur intensity: backdrop-blur-sm, backdrop-blur-md, backdrop-blur-lg, backdrop-blur-xl
+  blur: "backdrop-blur-xl",
+  // Border radius: rounded-lg, rounded-xl, rounded-2xl
+  rounded: "rounded-xl",
+  // Border color and opacity 
+  border: "border border-white/10",
+  // Shadow depth
+  shadow: "shadow-lg",
+  // Spacing and height
+  padding: "p-3",
+  maxHeight: "max-h-[160px]",
+  spacing: "space-y-1.5"
+};
 
 const getBossUnlockTitle = (level: number, t: (key: string) => string) => {
   if (level === 10) return t('boss_10');
@@ -122,6 +144,16 @@ export function LevelCarousel({
 
   const visibleItems = 5; // How many items to show 
 
+  const firstUnpassedLevel = React.useMemo(() => {
+    // Check levels 1 to 100 to find the first one that hasn't been passed
+    for (let l = 1; l <= 100; l++) {
+      const rec = records[l] || (records as any)[String(l)];
+      const isPassed = rec?.passed === true || (rec && rec.stars > 0);
+      if (!isPassed) return l;
+    }
+    return 101;
+  }, [records]);
+
   return (
     <motion.div 
         className="relative w-full h-full min-h-[400px] flex flex-col items-center justify-center cursor-grab active:cursor-grabbing" 
@@ -145,9 +177,17 @@ export function LevelCarousel({
 
                     const check = ProgressionManager.checkEnterLevel(level);
                     const isUnlocked = check.allowed;
-                    const record = records[level];
-                    const isPassed = record?.passed;
+                    const record = records[level] || (records as any)[String(level)];
+                    const isPassed = record?.passed === true || (record && record.stars > 0);
                     const isBoss = ProgressionManager.isBossLevel(level);
+
+                    // Show info for:
+                    // 1. All Boss levels permanently (regardless of pass status)
+                    // 2. Level 100 explicitly
+                    // 3. The next 3 unpassed levels relative to current progress
+                    const isFutureThree = level >= firstUnpassedLevel && level < firstUnpassedLevel + 3;
+                    const shouldShowInfo = isBoss || level === 100 || (!isPassed && isFutureThree);
+                    const levelInfo = shouldShowInfo ? getLevelInfo(level) : null;
 
                     // 3D Carousel calculations
                     const isCenter = offset === 0;
@@ -206,10 +246,12 @@ export function LevelCarousel({
                                 height: `${cardHeight}px`,
                                 transformStyle: "preserve-3d"
                             }}
-                            disabled={!isUnlocked}
+                            disabled={false}
                             onClick={() => {
                                 if (isCenter) {
-                                    onSelectLevel(level);
+                                    if (isUnlocked) {
+                                        onSelectLevel(level);
+                                    }
                                 } else {
                                     setCurrentIndex(i);
                                 }
@@ -220,7 +262,7 @@ export function LevelCarousel({
                                 isCenter ? "backdrop-blur-md" : "backdrop-blur-[2px]",
                                 isUnlocked 
                                   ? (isCenter ? "bg-slate-800/40 border-[1.5px] border-white/20 cursor-pointer hover:bg-slate-800/60" : "bg-slate-800/10 border-[1.5px] border-white/10 cursor-pointer hover:bg-slate-800/30")
-                                  : "bg-slate-900/20 border-[1.5px] border-slate-800/30 opacity-60 cursor-not-allowed",
+                                  : "bg-slate-900/20 border-[1.5px] border-slate-800/30 opacity-60 cursor-pointer",
                                 isPassed && "border-emerald-500/50 bg-emerald-900/10",
                                 isBoss && "ring-2 ring-amber-500/50 bg-amber-900/5",
                                 isCenter && isUnlocked && "border-cyan-400/60 shadow-[0_0_40px_rgba(34,211,238,0.25)] bg-cyan-950/40"
@@ -253,6 +295,39 @@ export function LevelCarousel({
                                         <span className="text-amber-500/80 text-xs font-bold tracking-widest drop-shadow-md">
                                             {getBossUnlockTitle(level, t)}
                                         </span>
+                                    </div>
+                                )}
+                                
+                                {levelInfo && (
+                                    <div className={cn(
+                                        "mt-2 w-full flex-1 flex flex-col shrink-0 z-20",
+                                        INFO_PANEL_PARAMS.maxHeight,
+                                        INFO_PANEL_PARAMS.background,
+                                        INFO_PANEL_PARAMS.blur,
+                                        INFO_PANEL_PARAMS.padding,
+                                        INFO_PANEL_PARAMS.rounded,
+                                        INFO_PANEL_PARAMS.border,
+                                        INFO_PANEL_PARAMS.shadow,
+                                        INFO_PANEL_PARAMS.spacing
+                                    )}>
+                                        <div className="flex items-center justify-between border-b border-white/10 pb-1 mb-1">
+                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Nodes</span>
+                                            <span className="text-xs font-mono text-cyan-400 font-bold">{levelInfo.nodes}</span>
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Frequency</div>
+                                            <div className="flex flex-wrap gap-1 max-h-12 overflow-y-auto custom-scrollbar">
+                                                {levelInfo.frequency.map((f, idx) => (
+                                                    <span key={idx} className="text-[8px] px-1.5 py-0.5 bg-slate-800/90 rounded text-slate-300 font-medium border border-white/5 whitespace-nowrap">
+                                                        {f}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between pt-1 border-t border-white/5 mt-1">
+                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">SoundMode</span>
+                                            <span className="text-[8px] font-bold text-emerald-400 truncate ml-2 text-right flex-1">{levelInfo.soundMode}</span>
+                                        </div>
                                     </div>
                                 )}
                                 

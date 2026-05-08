@@ -22,6 +22,7 @@ interface LevelScore {
   score: number;
 }
 
+import { getLevelInfo } from './lib/LevelUtils';
 import { useLanguage } from './lib/LanguageContext';
 
 export default function App() {
