@@ -182,6 +182,42 @@ export function FreeTrainingView({ onBack, selectedTrackId }: FreeTrainingViewPr
     regenerateLevel(config);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent rapid toggling if the key is held down
+      if (e.repeat) return;
+      
+      const activeEl = document.activeElement;
+      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      if (isInputFocused) return;
+
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        handleModeChange(listenMode === 'target' ? 'user' : 'target');
+      }
+
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        const isAllBypassed = userNodes.every(n => n.enabled === false);
+        const newNodes = userNodes.map(n => ({ ...n, enabled: isAllBypassed }));
+        if (engine) {
+          engine.setUserNodes(newNodes);
+        }
+        setUserNodes(newNodes);
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isSettled) {
+          handleSubmit();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [listenMode, engine, userNodes, isSettled, targetNodes, isScanning]);
+
   if (!engine) {
     return (
       <div className="flex items-center justify-center h-full bg-slate-950">
