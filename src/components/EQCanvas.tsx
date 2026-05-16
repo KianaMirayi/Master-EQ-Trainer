@@ -1218,7 +1218,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             const yDelta = e.movementY;
             const newNode = { ...newNodes[activeNodeIdx] };
             if (newNode.type === 'peaking') {
-                newNode.q = Math.max(0.1, Math.min(40, newNode.q - yDelta * 0.1));
+                newNode.q = Math.max(0.1, Math.min(40, newNode.q + yDelta * 0.1));
                 newNodes[activeNodeIdx] = newNode;
             }
         } else if (e.shiftKey) {
