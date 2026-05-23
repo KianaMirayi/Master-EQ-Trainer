@@ -144,6 +144,9 @@ export class AudioEngine {
     }
   }
 
+  private lastCtxTime: number = 0;
+  private currentPlayhead: number = 0;
+
   async play(timeOffset?: number) {
     console.log("Audio Engine play initiated. Buffer:", !!this.buffer, "State:", this.ctx.state);
     if (!this.buffer) return;
@@ -188,11 +191,14 @@ export class AudioEngine {
       const startOffset = timeOffset !== undefined ? timeOffset : this.playbackOffset;
       this.playbackOffset = startOffset;
       this.baseCurrentTime = this.ctx.currentTime;
+      this.lastCtxTime = this.ctx.currentTime;
       
       let actualStartOffset = startOffset;
-      if (this.isLooping && startOffset > this.loopEnd) {
-          actualStartOffset = this.loopStart + ((startOffset - this.loopStart) % (this.loopEnd - this.loopStart));
-      }
+      // We allow users to start playback anywhere, even outside the loop region
+      // If they start playback before the loop region, it will play into it and then loop back.
+      // If they start playback after the loop region, Web Audio will just play to the end.
+      
+      this.currentPlayhead = actualStartOffset;
 
       this.source.start(0, actualStartOffset);
       this.isPlaying = true;
@@ -221,9 +227,7 @@ export class AudioEngine {
           this.source.loopStart = this.loopStart;
           this.source.loopEnd = this.loopEnd;
       }
-      if (this.isPlaying && this.getCurrentTime() > this.loopEnd && this.isLooping) {
-          this.seek(this.loopStart);
-      }
+      // Removed the immediate seek to prevent jumpiness while setting loops
   }
 
   toggleLoop(enabled: boolean) {
@@ -239,21 +243,30 @@ export class AudioEngine {
   getCurrentTime(): number {
       if (!this.isPlaying) return this.playbackOffset;
       
-      let t = this.playbackOffset + (this.ctx.currentTime - this.baseCurrentTime);
+      const now = this.ctx.currentTime;
+      const delta = now - this.lastCtxTime;
+      this.lastCtxTime = now;
+      
+      const previousPlayhead = this.currentPlayhead;
+      this.currentPlayhead += delta;
+
       if (this.isLooping && this.buffer && this.loopEnd > 0) {
-          if (t > this.loopEnd) {
+          // Only wrap around if we NATURALLY crossed loopEnd during this delta frame.
+          // If loopEnd was actively dragged backwards so we were already past it, don't jump awkwardly!
+          if (previousPlayhead <= this.loopEnd && this.currentPlayhead > this.loopEnd) {
+              const overshoot = this.currentPlayhead - this.loopEnd;
               const loopDuration = this.loopEnd - this.loopStart;
+              
               if (loopDuration > 0) {
-                 t = this.loopStart + ((t - this.loopStart) % loopDuration);
+                  this.currentPlayhead = this.loopStart + (overshoot % loopDuration);
               }
           }
-      } else if (this.buffer && t > this.buffer.duration) {
-          // If not looping and past duration, it means playback finished
-          // We don't automatically update isPlaying here since we don't have an easily trappable onended event without complexities,
-          // but capping to duration is fine for UI.
-          t = this.buffer.duration;
       }
-      return t;
+      
+      if (this.buffer && this.currentPlayhead > this.buffer.duration) {
+          this.currentPlayhead = this.buffer.duration;
+      }
+      return this.currentPlayhead;
   }
 
   stop(saveOffset = false) {
