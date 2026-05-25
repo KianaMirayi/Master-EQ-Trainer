@@ -6,6 +6,7 @@ export interface NodeScoreReport {
   userNode: EQNodeData | null;
   isVetoed: boolean;
   vetoReason?: string;
+  penaltyReason?: string;
   Sf: number; // Frequency Score (Max 50)
   Sg: number; // Gain Score (Max 30)
   Sq: number; // Q/Bandwidth Score (Max 20)
@@ -22,53 +23,94 @@ export interface LevelScoreReport {
 export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNodeData[], levelId: number): LevelScoreReport {
   const reports: NodeScoreReport[] = [];
   
-  // 1. Copy user nodes for greedy matching
+  const remainingTargets = [...targetNodes];
   const remainingUserNodes = [...userNodes];
+  const matchedPairs: { target: EQNodeData; user: EQNodeData }[] = [];
+
+  // Phase 1: Match by SAME type globally, greedily taking smallest distance
+  while (true) {
+      let bestDist = Infinity;
+      let bestTIdx = -1;
+      let bestUIdx = -1;
+
+      for (let t = 0; t < remainingTargets.length; t++) {
+          for (let u = 0; u < remainingUserNodes.length; u++) {
+              if (remainingTargets[t].type === remainingUserNodes[u].type) {
+                  const dist = Math.abs(Math.log2(remainingUserNodes[u].freq / remainingTargets[t].freq));
+                  if (dist < bestDist) {
+                      bestDist = dist;
+                      bestTIdx = t;
+                      bestUIdx = u;
+                  }
+              }
+          }
+      }
+
+      if (bestTIdx === -1) break; // No more same-type matches possible
+
+      matchedPairs.push({ target: remainingTargets[bestTIdx], user: remainingUserNodes[bestUIdx] });
+      remainingTargets.splice(bestTIdx, 1);
+      remainingUserNodes.splice(bestUIdx, 1);
+  }
+
+  // Phase 2: Match remaining targets to any remaining user nodes greedily by distance
+  while (true) {
+      let bestDist = Infinity;
+      let bestTIdx = -1;
+      let bestUIdx = -1;
+
+      for (let t = 0; t < remainingTargets.length; t++) {
+          for (let u = 0; u < remainingUserNodes.length; u++) {
+              const dist = Math.abs(Math.log2(remainingUserNodes[u].freq / remainingTargets[t].freq));
+              if (dist < bestDist) {
+                  bestDist = dist;
+                  bestTIdx = t;
+                  bestUIdx = u;
+              }
+          }
+      }
+
+      if (bestTIdx === -1) break; // No more user nodes to match
+
+      matchedPairs.push({ target: remainingTargets[bestTIdx], user: remainingUserNodes[bestUIdx] });
+      remainingTargets.splice(bestTIdx, 1);
+      remainingUserNodes.splice(bestUIdx, 1);
+  }
+
+  // Any left-over targets couldn't be matched
+  for (const target of remainingTargets) {
+      const weight = getFletcherMunsonWeight(target.freq);
+      reports.push({
+          targetNode: target,
+          userNode: null,
+          isVetoed: true,
+          vetoReason: 'Missing matching node',
+          Sf: 0, Sg: 0, Sq: 0, baseScore: 0, weight
+      });
+  }
   
-  for (const target of targetNodes) {
-    let bestDist = Infinity;
-    let bestUserIdx = -1;
-    
-    // Match based on shortest octave distance
-    for (let i = 0; i < remainingUserNodes.length; i++) {
-        const user = remainingUserNodes[i];
-        const dist = Math.abs(Math.log2(user.freq / target.freq));
-        if (dist < bestDist) {
-            bestDist = dist;
-            bestUserIdx = i;
-        }
-    }
-    
-    let userMatched: EQNodeData | null = null;
-    if (bestUserIdx !== -1) {
-        userMatched = remainingUserNodes[bestUserIdx];
-        remainingUserNodes.splice(bestUserIdx, 1);
-    }
-    
+  // Now evaluate matched pairs
+  for (const pair of matchedPairs) {
+    const target = pair.target;
+    const userMatched = pair.user;
     const weight = getFletcherMunsonWeight(target.freq);
     
-    if (!userMatched) {
-        reports.push({
-            targetNode: target,
-            userNode: null,
-            isVetoed: true,
-            vetoReason: 'Missing matching node',
-            Sf: 0, Sg: 0, Sq: 0, baseScore: 0, weight
-        });
-        continue;
-    }
-    
-    // 2. Veto Checks (一票否决)
+    // 2. Veto Checks (一票否决) & Penalties
     let isVetoed = false;
     let vetoReason = '';
+    let isTypeMismatch = false;
+    let penaltyReason = '';
     
     const targetMode = target.stereoMode || 'Stereo';
     const userMode = userMatched.stereoMode || 'Stereo';
     
+    // Type mismatch is no longer an absolute veto, but a harsh penalty (Max 10 pts)
     if (target.type !== userMatched.type) {
-        isVetoed = true;
-        vetoReason = `Type Mismatch (${target.type} vs ${userMatched.type})`;
-    } else if (targetMode !== userMode) {
+        isTypeMismatch = true;
+        penaltyReason = `Type Mismatch Penalty (${target.type} vs ${userMatched.type})`;
+    } 
+    
+    if (targetMode !== userMode) {
         isVetoed = true;
         vetoReason = `M/S Strategy Mismatch (${targetMode} vs ${userMode})`;
     } else if (target.gain * userMatched.gain < 0) {
@@ -98,11 +140,11 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
     // 3. Calculate Component Scores
     // Sf: Frequency error in octaves. If off by 1 octave, 0 points.
     const octaveErr = Math.abs(Math.log2(userMatched.freq / target.freq));
-    const Sf = Math.max(0, 50 * (1 - octaveErr / 1.0)); 
+    let Sf = Math.max(0, 50 * (1 - octaveErr / 1.0)); 
     
     // Sg: Gain error in dB. If off by >6dB, 0 points.
     const gainErr = Math.abs(target.gain - userMatched.gain);
-    const Sg = Math.max(0, 30 * (1 - gainErr / 6.0));
+    let Sg = Math.max(0, 30 * (1 - gainErr / 6.0));
     
     // Sq: Q error. If off by > 2.0, 0 points.
     let Sq = 0;
@@ -114,12 +156,20 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
         Sq = 20; 
     }
     
+    // Apply type mismatch penalty (Scale down to 10% -> Max 10 pts total)
+    if (isTypeMismatch) {
+        Sf *= 0.1;
+        Sg *= 0.1;
+        Sq *= 0.1;
+    }
+
     const baseScore = Sf + Sg + Sq;
     
     reports.push({
         targetNode: target,
         userNode: userMatched,
         isVetoed: false,
+        penaltyReason: isTypeMismatch ? penaltyReason : undefined,
         Sf, Sg, Sq, baseScore, weight
     });
   }

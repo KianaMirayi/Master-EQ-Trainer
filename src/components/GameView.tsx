@@ -740,11 +740,16 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
                               {r.isVetoed ? (
                                 <div className="text-red-400/80 mb-1">{r.vetoReason}</div>
                               ) : (
-                                <div className="text-slate-400 grid grid-cols-3 gap-1 mb-1 font-mono text-[10px]">
-                                  <div>Sf: {Math.round(r.Sf)}</div>
-                                  <div>Sg: {Math.round(r.Sg)}</div>
-                                  <div>Sq: {Math.round(r.Sq)}</div>
-                                </div>
+                                <>
+                                  <div className="text-slate-400 grid grid-cols-3 gap-1 mb-1 font-mono text-[10px]">
+                                    <div>Sf: {Math.round(r.Sf)}</div>
+                                    <div>Sg: {Math.round(r.Sg)}</div>
+                                    <div>Sq: {Math.round(r.Sq)}</div>
+                                  </div>
+                                  {r.penaltyReason && (
+                                    <div className="text-amber-400/80 mb-1 font-semibold">{r.penaltyReason}</div>
+                                  )}
+                                </>
                               )}
                               <div className="text-slate-500 mt-1.5 flex justify-between items-center pt-1.5 border-t border-slate-800/60">
                                 <span>Weight: x{r.weight}</span>
