@@ -373,8 +373,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "AA",
@@ -408,8 +408,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "BA",
@@ -443,8 +443,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.8,
+        "shelf": 0.2
       },
       "freqPools": [
         "AA",
@@ -496,8 +496,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.8,
+        "shelf": 0.2
       },
       "freqPools": [
         "AA",
@@ -549,8 +549,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "AA",
@@ -602,8 +602,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "AA",
@@ -655,8 +655,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.8,
+        "shelf": 0.2
       },
       "freqPools": [
         "AA",
@@ -708,8 +708,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.8,
+        "shelf": 0.2
       },
       "freqPools": [
         "AA",
@@ -761,8 +761,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.7,
-        "shelf": 0.3
+        "bell": 0.8,
+        "shelf": 0.2
       },
       "freqPools": [
         "AA",
