@@ -274,7 +274,7 @@ export function LevelCarousel({
                             className={cn(
                                 "absolute rounded-2xl flex flex-col items-center justify-center pointer-events-auto overflow-hidden",
                                 "shadow-2xl transition-colors duration-300",
-                                isCenter ? "backdrop-blur-md" : "backdrop-blur-[2px]",
+                                isCenter ? "backdrop-blur-md" : "",
                                 isUnlocked 
                                   ? (isCenter ? "bg-slate-800/40 border-[1.5px] border-white/20 cursor-pointer hover:bg-slate-800/60" : "bg-slate-800/10 border-[1.5px] border-white/10 cursor-pointer hover:bg-slate-800/30")
                                   : "bg-slate-900/20 border-[1.5px] border-slate-800/30 opacity-60 cursor-pointer",

@@ -1051,7 +1051,7 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-slate-600">
                       <span>Acoustic Mastery Lab</span>
-                      <span>v1.2.0</span>
+                      <span>v1.2.1</span>
                     </div>
                     <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
                       <p className="text-[11px] text-slate-500 leading-relaxed italic">
