@@ -493,6 +493,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   }, [targetNodes]);
 
   const listeningNodeIdxRef = useRef(listeningNodeIdx);
+  const dragStartRef = useRef<{ clientX: number, clientY: number, nodeX: number, nodeY: number } | null>(null);
   useEffect(() => {
     listeningNodeIdxRef.current = listeningNodeIdx;
   }, [listeningNodeIdx]);
@@ -1197,6 +1198,14 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
     setActiveNodeIdx(idx);
     setSelectedNodeIdx(idx);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    const node = userNodes[idx];
+    dragStartRef.current = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        nodeX: freqToX(node.freq),
+        nodeY: gainToY(node.gain || 0)
+    };
   };
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -1220,6 +1229,13 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
             if (newNode.type === 'peaking') {
                 newNode.q = Math.max(0.1, Math.min(40, newNode.q + yDelta * 0.1));
                 newNodes[activeNodeIdx] = newNode;
+            }
+            if (dragStartRef.current) {
+                // Keep drag start synced so normal drag doesn't jump
+                dragStartRef.current.clientX = e.clientX;
+                dragStartRef.current.clientY = e.clientY;
+                dragStartRef.current.nodeX = freqToX(newNode.freq);
+                dragStartRef.current.nodeY = gainToY(newNode.gain || 0);
             }
         } else if (e.shiftKey) {
             // Fine-tuning with movementX and movementY
@@ -1248,15 +1264,31 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
                 newNode.gain = finalGain;
             }
             newNodes[activeNodeIdx] = newNode;
+            
+            if (dragStartRef.current) {
+                // Keep drag start synced so normal drag doesn't jump
+                dragStartRef.current.clientX = e.clientX;
+                dragStartRef.current.clientY = e.clientY;
+                dragStartRef.current.nodeX = nextX;
+                dragStartRef.current.nodeY = nextY;
+            }
         } else {
             const newNode = { ...newNodes[activeNodeIdx] };
-            let finalFreq = newFreq;
+            let nextX = x;
+            let nextY = y;
+            if (dragStartRef.current) {
+                const deltaX = (e.clientX - dragStartRef.current.clientX) / rect.width;
+                const deltaY = (e.clientY - dragStartRef.current.clientY) / rect.height;
+                nextX = Math.max(0, Math.min(1, dragStartRef.current.nodeX + deltaX));
+                nextY = Math.max(0, Math.min(1, dragStartRef.current.nodeY + deltaY));
+            }
+            let finalFreq = xToFreq(nextX);
             
             if (newNode.minFreq !== undefined && newNode.maxFreq !== undefined) {
                 finalFreq = Math.max(newNode.minFreq, Math.min(newNode.maxFreq, finalFreq));
             }
             
-            let finalGain = newGain;
+            let finalGain = yToGain(nextY);
             if (newNode.minGain !== undefined && newNode.maxGain !== undefined) {
                 finalGain = Math.max(newNode.minGain, Math.min(newNode.maxGain, finalGain));
             }
@@ -1275,6 +1307,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   }, [activeNodeIdx, listeningNodeIdx, userNodes, onNodesChange, engine]);
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    dragStartRef.current = null;
     if (activeNodeIdx !== null) {
       setActiveNodeIdx(null);
       if (listeningNodeIdx !== null) {
@@ -1295,6 +1328,14 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
       setListeningNodeIdx(idx);
       engine.setSoloBand(userNodes[idx]);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+      const node = userNodes[idx];
+      dragStartRef.current = {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          nodeX: freqToX(node.freq),
+          nodeY: gainToY(node.gain || 0)
+      };
   };
 
   const handleDoubleClick = (idx: number) => {
