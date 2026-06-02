@@ -164,6 +164,8 @@ export class AudioEngine {
     try {
       this.source = this.ctx.createBufferSource();
       this.source.buffer = this.buffer;
+      this.source.channelCount = 2;
+      this.source.channelCountMode = 'explicit';
       this.source.loop = this.isLooping;
       if (this.isLooping) {
         this.source.loopStart = this.loopStart;
@@ -332,6 +334,10 @@ export class AudioEngine {
 
   private constructFilterGraph(nodes: EQNodeData[]): { input: GainNode; output: GainNode; midFilters: BiquadFilterNode[]; sideFilters: BiquadFilterNode[]; } {
     const input = this.ctx.createGain();
+    
+    // Force up-mix to stereo before M/S split so mono files play properly in both channels
+    input.channelCount = 2;
+    input.channelCountMode = 'explicit';
 
     // Splitter
     const splitter = this.ctx.createChannelSplitter(2);
