@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play, Pause, Repeat, Music } from 'lucide-react';
 import { AudioEngine } from '../lib/AudioEngine';
-import { cn } from '../lib/utils';
+import { cn, getTagColor } from '../lib/utils';
 import LoaderAnimation from './LoaderAnimation';
 
 interface WaveformPlayerProps {
@@ -10,9 +10,10 @@ interface WaveformPlayerProps {
   trackName?: string;
   trackArtist?: string;
   trackCoverArt?: string;
+  trackTags?: string[];
 }
 
-export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt }: WaveformPlayerProps) => {
+export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, trackArtist, trackCoverArt, trackTags }: WaveformPlayerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(engine?.isPlaying || false);
@@ -254,8 +255,20 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
                   </div>
               )}
               <div className="flex flex-col min-w-0">
-                  <div className="text-sm font-sans font-bold italic tracking-wide text-slate-100 truncate">
-                      {trackName}
+                  <div className="flex items-center gap-2">
+                      <div className="text-sm font-sans font-bold italic tracking-wide text-slate-100 truncate">
+                          {trackName}
+                      </div>
+                      {trackTags && trackTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                              {trackTags.map(tag => (
+                                  <span key={tag} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-950/50 border border-slate-800 text-slate-300">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", getTagColor(tag))} />
+                                      {tag}
+                                  </span>
+                              ))}
+                          </div>
+                      )}
                   </div>
                   {trackArtist && (
                       <div className="text-xs text-slate-400 truncate">

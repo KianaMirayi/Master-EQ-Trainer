@@ -36,9 +36,10 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
 interface FreeTrainingViewProps {
   onBack: () => void;
   selectedTrackId: string;
+  selectedRandomTags?: string[];
 }
 
-export function FreeTrainingView({ onBack, selectedTrackId }: FreeTrainingViewProps) {
+export function FreeTrainingView({ onBack, selectedTrackId, selectedRandomTags }: FreeTrainingViewProps) {
   const { t } = useLanguage();
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -112,7 +113,7 @@ export function FreeTrainingView({ onBack, selectedTrackId }: FreeTrainingViewPr
     let tToPlay: Track | null = null;
     if (selectedTrackId === 'random') tToPlay = TrackManager.getRandomTrack('all');
     else if (selectedTrackId === 'random-builtin') tToPlay = TrackManager.getRandomTrack('builtin');
-    else if (selectedTrackId === 'random-custom') tToPlay = TrackManager.getRandomTrack('custom');
+    else if (selectedTrackId === 'random-custom') tToPlay = TrackManager.getRandomTrack('custom', selectedRandomTags);
     else tToPlay = TrackManager.getAllTracks().find(t => t.id === selectedTrackId) || TrackManager.getRandomTrack('builtin');
 
     if (tToPlay) {
@@ -325,6 +326,7 @@ export function FreeTrainingView({ onBack, selectedTrackId }: FreeTrainingViewPr
               trackName={activeTrack?.name || 'Custom Track'}
               trackArtist={activeTrack?.artist}
               trackCoverArt={activeTrack?.coverArt}
+              trackTags={activeTrack?.tags}
               isLoadingTrack={isLoadingAudio}
             />
           </div>

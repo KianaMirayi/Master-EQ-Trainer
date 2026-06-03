@@ -63,6 +63,7 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
 interface GameViewProps {
   level: number;
   selectedTrackId: string;
+  selectedRandomTags?: string[];
   isTestMode?: boolean;
   onLevelComplete: (score: number, stars: number) => void;
   onSaveRecord: (score: number, stars: number) => void;
@@ -212,7 +213,7 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
   );
 }
 
-export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, onSaveRecord, onRetry, onBack, onLevelChange }: GameViewProps) {
+export function GameView({ level, selectedTrackId, selectedRandomTags, isTestMode, onLevelComplete, onSaveRecord, onRetry, onBack, onLevelChange }: GameViewProps) {
   const { t } = useLanguage();
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -254,6 +255,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
   const [trackName, setTrackName] = useState<string>('');
   const [trackArtist, setTrackArtist] = useState<string>('');
   const [trackCoverArt, setTrackCoverArt] = useState<string>('');
+  const [trackTags, setTrackTags] = useState<string[]>([]);
   const [showMeter, setShowMeter] = useState(true);
   const [showTestModePanel, setShowTestModePanel] = useState(false);
 
@@ -299,7 +301,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
       } else if (selectedTrackId === 'random-builtin') {
           tToPlay = TrackManager.getRandomTrack('builtin');
       } else if (selectedTrackId === 'random-custom') {
-          tToPlay = TrackManager.getRandomTrack('custom');
+          tToPlay = TrackManager.getRandomTrack('custom', selectedRandomTags);
       } else {
           tToPlay = TrackManager.getAllTracks().find(t => t.id === selectedTrackId) || null;
       }
@@ -308,6 +310,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
       setTrackName(tToPlay ? tToPlay.name : '');
       setTrackArtist(tToPlay ? tToPlay.artist || '' : '');
       setTrackCoverArt(tToPlay ? tToPlay.coverArt || '' : '');
+      setTrackTags(tToPlay ? tToPlay.tags || [] : []);
 
       // 1. Generate Nodes
       const { targets: tNodes } = LevelManager.generateLevelTargets(level);
@@ -808,7 +811,7 @@ export function GameView({ level, selectedTrackId, isTestMode, onLevelComplete, 
       <main className="flex-1 min-h-0 p-4 md:p-6 relative flex flex-col gap-4">
           <div className="flex flex-col relative w-full items-center shrink-0">
               <div className="w-full relative">
-                  <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} trackName={trackName} trackArtist={trackArtist} trackCoverArt={trackCoverArt} />
+                  <WaveformPlayer engine={engine} isLoadingTrack={isLoadingAudio} trackName={trackName} trackArtist={trackArtist} trackCoverArt={trackCoverArt} trackTags={trackTags} />
               </div>
           </div>
           

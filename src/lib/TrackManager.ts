@@ -9,6 +9,7 @@ export interface Track {
     isCustom: boolean;
     artist?: string;
     coverArt?: string; // Data URL for the cover art
+    tags?: string[]; // Custom tags assigned by user
 }
 
 export const BUILT_IN_TRACKS: Track[] = [
@@ -72,7 +73,8 @@ export class TrackManager {
                         file: item.file,
                         isCustom: true,
                         artist: item.artist,
-                        coverArt: coverArt
+                        coverArt: coverArt,
+                        tags: item.tags || []
                     });
                 }
 
@@ -85,7 +87,8 @@ export class TrackManager {
                         name: t.name,
                         artist: t.artist,
                         coverArt: t.coverArt,
-                        file: t.file
+                        file: t.file,
+                        tags: t.tags
                     })));
                 }
             } else {
@@ -242,7 +245,8 @@ export class TrackManager {
             artist: metadata.artist,
             coverArt: metadata.coverArt,
             file: file,
-            isCustom: true
+            isCustom: true,
+            tags: []
         };
         this.customTracks.push(track);
         
@@ -252,7 +256,8 @@ export class TrackManager {
                 name: t.name,
                 artist: t.artist,
                 coverArt: t.coverArt,
-                file: t.file
+                file: t.file,
+                tags: t.tags
             })));
         } catch (e) {
              console.error("Failed to save custom track to IndexedDB", e);
@@ -269,19 +274,59 @@ export class TrackManager {
                 name: t.name,
                 artist: t.artist,
                 coverArt: t.coverArt,
-                file: t.file
+                file: t.file,
+                tags: t.tags
             })));
         } catch (e) {
              console.error("Failed to delete custom track from IndexedDB", e);
         }
     }
 
-    static getRandomTrack(pool: 'all' | 'builtin' | 'custom' = 'all'): Track | null {
+    static async updateTrackTags(id: string, tags: string[]): Promise<void> {
+        const index = this.customTracks.findIndex(t => t.id === id);
+        if (index > -1) {
+            this.customTracks[index].tags = tags;
+            try {
+                await set(STORE_KEY, this.customTracks.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    artist: t.artist,
+                    coverArt: t.coverArt,
+                    file: t.file,
+                    tags: t.tags
+                })));
+            } catch (e) {
+                console.error("Failed to update custom track tags to IndexedDB", e);
+            }
+        }
+    }
+
+    static getAllUniqueTags(): string[] {
+        const tagSet = new Set<string>();
+        for (const track of this.customTracks) {
+            if (track.tags) {
+                for (const tag of track.tags) {
+                    tagSet.add(tag);
+                }
+            }
+        }
+        return Array.from(tagSet);
+    }
+
+    static getRandomTrack(pool: 'all' | 'builtin' | 'custom' = 'all', allowedTags?: string[]): Track | null {
         let list: Track[] = [];
         if (pool === 'all') list = this.getAllTracks();
         else if (pool === 'builtin') list = this.getBuiltInTracks();
         else if (pool === 'custom') list = this.getCustomTracks();
         
+        if (allowedTags && allowedTags.length > 0) {
+            list = list.filter(t => {
+                if (!t.isCustom) return true; // built-in tracks aren't filtered by custom tags? well, usually users select "random custom" + tags
+                if (!t.tags || t.tags.length === 0) return false;
+                return t.tags.some(tag => allowedTags.includes(tag));
+            });
+        }
+
         if (list.length === 0) return null;
         return list[Math.floor(Math.random() * list.length)];
     }

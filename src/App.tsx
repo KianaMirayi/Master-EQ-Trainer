@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug, PlayCircle } from 'lucide-react';
-import { EQNodeData, cn } from './lib/utils';
+import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug, PlayCircle, Tag, Plus, Check, Info } from 'lucide-react';
+import { EQNodeData, cn, getTagColor } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
 import StarsBackground from './components/StarsBackground';
@@ -25,6 +25,9 @@ interface LevelScore {
 
 import { getLevelInfo } from './lib/LevelUtils';
 import { useLanguage } from './lib/LanguageContext';
+import { CHANGELOG } from './lib/changelog';
+
+// Utility to generate a stable color class or hex string based on a tag name
 
 export default function App() {
   const { t, language, setLanguage } = useLanguage();
@@ -37,6 +40,16 @@ export default function App() {
   const [selectedTrackId, setSelectedTrackId] = useState<string>(() => {
     return localStorage.getItem('last-selected-track') || 'random-builtin';
   });
+  const [selectedRandomTags, setSelectedRandomTags] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('last-selected-tags') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [allUniqueTags, setAllUniqueTags] = useState<string[]>([]);
+  const [editingTrackTagsId, setEditingTrackTagsId] = useState<string | null>(null);
+  const [newTagInput, setNewTagInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -44,6 +57,7 @@ export default function App() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [showDonationQR, setShowDonationQR] = useState(false);
   const [randomDonationImg, setRandomDonationImg] = useState('/assets/donations/love.png');
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -150,6 +164,18 @@ export default function App() {
     localStorage.setItem('last-selected-track', selectedTrackId);
   }, [selectedTrackId]);
 
+  useEffect(() => {
+    localStorage.setItem('last-selected-tags', JSON.stringify(selectedRandomTags));
+  }, [selectedRandomTags]);
+
+  const refreshTags = () => {
+    setAllUniqueTags(TrackManager.getAllUniqueTags());
+  };
+
+  useEffect(() => {
+    refreshTags();
+  }, [tracks.custom]);
+
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>, droppedFiles?: FileList) => {
     let files = droppedFiles || ('files' in e.target ? (e.target as HTMLInputElement).files : null);
     if (!files || files.length === 0) return;
@@ -219,6 +245,39 @@ export default function App() {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleAudioUpload(e, e.dataTransfer.files);
     }
+  };
+
+  const toggleTagForTrack = async (track: any, tagToToggle: string) => {
+    let newTags = track.tags || [];
+    if (newTags.includes(tagToToggle)) {
+        newTags = newTags.filter((t: string) => t !== tagToToggle);
+    } else {
+        newTags = [...newTags, tagToToggle];
+    }
+    await TrackManager.updateTrackTags(track.id, newTags);
+    const updatedCustomTracks = TrackManager.getCustomTracks();
+    setTracks(prev => ({ ...prev, custom: updatedCustomTracks }));
+    refreshTags();
+  };
+
+  const handleCreateTag = async (track: any) => {
+      const tag = newTagInput.trim();
+      if (!tag) return;
+      let newTags = track.tags || [];
+      if (!newTags.includes(tag)) {
+          newTags = [...newTags, tag];
+          await TrackManager.updateTrackTags(track.id, newTags);
+          const updatedCustomTracks = TrackManager.getCustomTracks();
+          setTracks(prev => ({ ...prev, custom: updatedCustomTracks }));
+          refreshTags();
+      }
+      setNewTagInput("");
+  };
+
+  const toggleRandomTag = (tag: string) => {
+      setSelectedRandomTags(prev => 
+          prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+      );
   };
 
   const handleDeleteCustomTrack = async (id: string, e: React.MouseEvent) => {
@@ -313,6 +372,45 @@ export default function App() {
 
   const renderModals = () => (
     <>
+      <AnimatePresence>
+        {isChangelogOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl overflow-y-auto max-h-[85vh] custom-scrollbar"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold font-sans text-slate-100 uppercase tracking-wide">Release Notes</h2>
+                <button 
+                  onClick={() => setIsChangelogOpen(false)}
+                  className="p-2 -mr-2 text-slate-400 hover:text-slate-200 transition-colors rounded-lg hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                {CHANGELOG.map((log, index) => (
+                  <div key={log.version} className={cn("space-y-3", index > 0 && "border-t border-slate-800 pt-4")}>
+                    <div className="flex items-center justify-between">
+                      <h3 className={cn("text-sm font-bold", index === 0 ? "text-cyan-400" : "text-slate-400")}>{log.version}</h3>
+                      <span className="text-xs text-slate-500 font-mono">{log.date}</span>
+                    </div>
+                    <ul className={cn("list-disc pl-4 space-y-1.5 text-sm", index === 0 ? "text-slate-300" : "text-slate-400")}>
+                      {log.changes.map((change, i) => (
+                        <li key={i}>{change}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isLeaderboardOpen && (
           <LeaderboardModal 
@@ -440,6 +538,7 @@ export default function App() {
             <GameView 
               level={activeLevel} 
               selectedTrackId={selectedTrackId} 
+              selectedRandomTags={selectedRandomTags}
               isTestMode={isTestMode}
               onLevelComplete={handleLevelComplete} 
               onSaveRecord={(score, stars) => {
@@ -468,6 +567,7 @@ export default function App() {
           >
             <FreeTrainingView 
               selectedTrackId={selectedTrackId}
+              selectedRandomTags={selectedRandomTags}
               onBack={() => setCurrentView('dashboard')} 
             />
           </motion.div>
@@ -868,14 +968,35 @@ export default function App() {
                       <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-builtin' ? 'bg-cyan-400' : 'bg-transparent')} />
                       {t('random_builtin')}
                     </button>
-                    <button 
-                      onClick={() => tracks.custom.length > 0 && setSelectedTrackId('random-custom')}
-                      disabled={tracks.custom.length === 0}
-                      className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed", selectedTrackId === 'random-custom' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
-                    >
-                      <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-custom' ? 'bg-cyan-400' : 'bg-transparent')} />
-                      {t('random_custom')}
-                    </button>
+                    <div className="flex flex-col">
+                      <button 
+                        onClick={() => tracks.custom.length > 0 && setSelectedTrackId('random-custom')}
+                        disabled={tracks.custom.length === 0}
+                        className={cn("px-4 py-2.5 rounded-lg border text-sm text-left transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed", selectedTrackId === 'random-custom' ? (allUniqueTags.length > 0 ? 'bg-cyan-500/10 border-cyan-500 border-b-0 rounded-b-none text-cyan-400' : 'bg-cyan-500/10 border-cyan-500 text-cyan-400') : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700/80')}
+                      >
+                        <div className={cn("w-2 h-2 rounded-full", selectedTrackId === 'random-custom' ? 'bg-cyan-400' : 'bg-transparent')} />
+                        {t('random_custom')}
+                      </button>
+                      {selectedTrackId === 'random-custom' && allUniqueTags.length > 0 && (
+                        <div className="px-4 py-3 bg-slate-900 border border-t-0 border-cyan-500 rounded-b-lg">
+                          <div className="flex flex-wrap gap-2">
+                            {allUniqueTags.map(tag => {
+                               const isSelected = selectedRandomTags.includes(tag);
+                               return (
+                                 <button 
+                                    key={tag}
+                                    onClick={() => toggleRandomTag(tag)}
+                                    className={cn("flex items-center gap-1.5 text-xs px-2 py-1 border rounded-lg transition-colors", isSelected ? "border-cyan-500/50 bg-cyan-400/10 text-cyan-400" : "border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700")}
+                                 >
+                                    <div className={cn("w-2 h-2 rounded-full", getTagColor(tag), !isSelected && "opacity-50")} />
+                                    {tag}
+                                 </button>
+                               );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -926,31 +1047,92 @@ export default function App() {
                       </div>
                     )}
                     {tracks.custom.length > 0 ? tracks.custom.map(t => (
-                      <div 
-                        key={t.id} 
-                        onClick={() => setSelectedTrackId(t.id)}
-                        className={cn("group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer", selectedTrackId === t.id ? "bg-cyan-500/20 font-medium whitespace-normal" : "hover:bg-slate-800 text-slate-300 whitespace-normal")}
-                      >
-                        <div className="flex-1 flex items-center gap-3 overflow-hidden">
-                          {t.coverArt ? (
-                            <img src={t.coverArt} alt="Cover" className={cn("w-10 h-10 rounded shrink-0 object-cover", selectedTrackId === t.id ? "ring-2 ring-cyan-500/50" : "")} />
-                          ) : (
-                            <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
-                               <Music className="w-5 h-5" />
+                      <div key={t.id} className="flex flex-col bg-slate-900/10 rounded-md mb-1 pb-1">
+                        <div 
+                          onClick={() => setSelectedTrackId(t.id)}
+                          className={cn("group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors cursor-pointer", selectedTrackId === t.id ? "bg-cyan-500/20 font-medium whitespace-normal" : "hover:bg-slate-800 text-slate-300 whitespace-normal")}
+                        >
+                          <div className="flex-1 flex items-center gap-3 overflow-hidden">
+                            {t.coverArt ? (
+                              <img src={t.coverArt} alt="Cover" className={cn("w-10 h-10 rounded shrink-0 object-cover", selectedTrackId === t.id ? "ring-2 ring-cyan-500/50" : "")} />
+                            ) : (
+                              <div className={cn("w-10 h-10 rounded flex items-center justify-center shrink-0", selectedTrackId === t.id ? "bg-cyan-500/20 ring-2 ring-cyan-500/50 text-cyan-400" : "bg-slate-800 text-slate-500")}>
+                                 <Music className="w-5 h-5" />
+                              </div>
+                            )}
+                            <div className="flex flex-col flex-1 min-w-0 pr-2">
+                               <div className={cn("truncate w-full", selectedTrackId === t.id ? "text-cyan-400" : "")}>{t.name}</div>
+                               {t.artist && <div className={cn("text-xs truncate w-full", selectedTrackId === t.id ? "text-cyan-500/80" : "text-slate-500")}>{t.artist}</div>}
+                               {t.tags && t.tags.length > 0 && (
+                                 <div className="flex flex-wrap gap-1 mt-1">
+                                   {t.tags.map(tag => (
+                                     <span key={tag} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
+                                        <div className={cn("w-1.5 h-1.5 rounded-full", getTagColor(tag))} />
+                                        {tag}
+                                     </span>
+                                   ))}
+                                 </div>
+                               )}
                             </div>
-                          )}
-                          <div className="flex flex-col flex-1 min-w-0 pr-2">
-                             <div className={cn("truncate w-full", selectedTrackId === t.id ? "text-cyan-400" : "")}>{t.name}</div>
-                             {t.artist && <div className={cn("text-xs truncate w-full", selectedTrackId === t.id ? "text-cyan-500/80" : "text-slate-500")}>{t.artist}</div>}
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-shrink-0 focus-within:opacity-100">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingTrackTagsId(editingTrackTagsId === t.id ? null : t.id); }}
+                              className={cn("p-1.5 rounded transition-colors", editingTrackTagsId === t.id ? "text-cyan-400 bg-cyan-400/10" : "text-slate-500 hover:text-cyan-400 hover:bg-slate-800")}
+                              title="Edit Tags"
+                            >
+                              <Tag className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => handleDeleteCustomTrack(t.id, e)}
+                              className="text-slate-500 hover:text-red-400 hover:bg-slate-800 p-1.5 rounded transition-colors"
+                              title="Delete track"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-                        <button 
-                          onClick={(e) => handleDeleteCustomTrack(t.id, e)}
-                          className="text-slate-500 hover:text-red-400 p-1.5 -mr-1.5 rounded transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 focus:opacity-100"
-                          title="Delete track"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        
+                        {/* Inline Tag Editor */}
+                        {editingTrackTagsId === t.id && (
+                          <div className="px-3 pb-3 pt-2 bg-slate-950/30 rounded-b-md mx-1 border-t-0 border-slate-800">
+                            <div className="text-xs text-slate-500 mb-2">Toggle existing tags:</div>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {allUniqueTags.length === 0 && <span className="text-xs text-slate-600 italic">No tags created yet.</span>}
+                              {allUniqueTags.map(tag => {
+                                 const isSelected = t.tags?.includes(tag);
+                                 return (
+                                   <button 
+                                      key={tag}
+                                      onClick={() => toggleTagForTrack(t, tag)}
+                                      className={cn("flex items-center gap-1.5 text-xs px-2 py-1 border rounded-md transition-colors", isSelected ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400" : "border-slate-800 bg-slate-900 text-slate-400 hover:bg-slate-800")}
+                                   >
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", getTagColor(tag))} />
+                                      {tag}
+                                      {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                                   </button>
+                                 );
+                              })}
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <input 
+                                type="text" 
+                                placeholder="Create new tag..." 
+                                value={newTagInput} 
+                                onChange={e => setNewTagInput(e.target.value)} 
+                                onKeyDown={(e) => { if(e.key==='Enter') handleCreateTag(t); }} 
+                                className="flex-1 bg-slate-900 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
+                              />
+                              <button 
+                                onClick={() => handleCreateTag(t)} 
+                                disabled={!newTagInput.trim()}
+                                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-300 px-3 py-1.5 rounded-md text-xs transition-colors"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )) : (!isUploading && (
                       <button 
@@ -1051,7 +1233,16 @@ export default function App() {
                   >
                     <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-slate-600">
                       <span>Acoustic Mastery Lab</span>
-                      <span>v1.2.1</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setIsChangelogOpen(true)}
+                          className="hover:text-cyan-400 transition-colors p-1 -m-1"
+                          title="Release Notes"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                        <span>{CHANGELOG[0]?.version || 'v1.0.0'}</span>
+                      </div>
                     </div>
                     <div className="bg-slate-950/30 p-3 rounded-lg border border-slate-800/50">
                       <p className="text-[11px] text-slate-500 leading-relaxed italic">
