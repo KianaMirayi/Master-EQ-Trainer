@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GameView } from './components/GameView';
-import { Headphones, Trophy, BarChart2, FolderDown, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug, PlayCircle, Tag, Plus, Check, Info } from 'lucide-react';
+import { Headphones, Trophy, BarChart2, FolderDown, Flame, Lock, Music, Upload, Settings, X, Trash2, ChevronLeft, ChevronRight, Activity, LayoutGrid, StretchHorizontal, User, Bug, PlayCircle, Tag, Plus, Check, Info } from 'lucide-react';
 import { EQNodeData, cn, getTagColor } from './lib/utils';
 import { TrackManager } from './lib/TrackManager';
 import { ProgressionManager, LevelRecord } from './lib/ProgressionManager';
@@ -27,11 +27,13 @@ import { getLevelInfo } from './lib/LevelUtils';
 import { useLanguage } from './lib/LanguageContext';
 import { CHANGELOG } from './lib/changelog';
 
+import { DailyTrainingView } from './components/DailyTrainingView';
+
 // Utility to generate a stable color class or hex string based on a tag name
 
 export default function App() {
   const { t, language, setLanguage } = useLanguage();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile' | 'free_training'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'game' | 'calibration' | 'profile' | 'free_training' | 'daily_training'>('dashboard');
   const [dashboardMode, setDashboardMode] = useState<'grid' | 'carousel'>('carousel');
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
@@ -65,6 +67,17 @@ export default function App() {
   const [showPeakCongratulation, setShowPeakCongratulation] = useState(false);
   const [showBossCongratulation, setShowBossCongratulation] = useState<number | null>(null);
   const [uploadMessage, setUploadMessage] = useState<{ text: string, type: 'error' | 'info' | 'success' } | null>(null);
+
+  // Changelog auto popup
+  useEffect(() => {
+    const lastViewedVersion = localStorage.getItem('lastViewedChangelogVersion');
+    const latestVersion = CHANGELOG[0]?.version;
+    
+    if (latestVersion && lastViewedVersion !== latestVersion) {
+      setIsChangelogOpen(true);
+      localStorage.setItem('lastViewedChangelogVersion', latestVersion);
+    }
+  }, []);
 
   // Support section randomization
   useEffect(() => {
@@ -556,6 +569,23 @@ export default function App() {
           </motion.div>
         )}
 
+        {currentView === 'daily_training' && (
+          <motion.div
+            key="daily_training"
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="absolute inset-0 z-20"
+          >
+            <DailyTrainingView 
+              selectedTrackId={selectedTrackId}
+              selectedRandomTags={selectedRandomTags}
+              onBack={() => setCurrentView('dashboard')} 
+            />
+          </motion.div>
+        )}
+
         {currentView === 'free_training' && (
           <motion.div
             key="free_training"
@@ -701,6 +731,17 @@ export default function App() {
               </div>
               
               <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setCurrentView('daily_training')}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition group"
+                >
+                  <Activity className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-medium">每日训练</span>
+                  <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold", PlayerProfileManager.loadStats().dailyTrainingStreak > 0 ? "text-orange-400 bg-orange-400/10" : "text-slate-500 bg-slate-800/80")}>
+                    <Flame className={cn("w-3 h-3", PlayerProfileManager.loadStats().dailyTrainingStreak > 0 ? "" : "opacity-50")} />
+                    {PlayerProfileManager.loadStats().dailyTrainingStreak}
+                  </div>
+                </button>
                 <button 
                   onClick={() => setCurrentView('free_training')}
                   className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition group"
@@ -925,25 +966,6 @@ export default function App() {
                     <div>
                       <h3 className="font-medium text-slate-200">{t('hp_calibration')}</h3>
                       <p className="text-sm text-slate-400 mt-0.5">{t('hp_calibration_desc')}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />
-                </button>
-
-                <button 
-                  onClick={() => {
-                    setIsSettingsOpen(false);
-                    setCurrentView('free_training');
-                  }}
-                  className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-800 border border-slate-800 rounded-xl transition-colors text-left group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500/20 group-hover:text-emerald-300 transition-colors">
-                      <PlayCircle className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-slate-200">{t('free_training')}</h3>
-                      <p className="text-sm text-slate-400 mt-0.5">{t('free_training_desc')}</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors" />

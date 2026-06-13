@@ -857,6 +857,7 @@ export function GameView({ level, selectedTrackId, selectedRandomTags, isTestMod
                         isScanning={isScanning}
                         listenMode={listenMode}
                         onListenModeChange={handleModeChange}
+                        maxNodes={targetNodes.length}
                         onNodeSoloChange={(isSolo) => {
                             if (isSolo && tutorialStepRef.current === 3) {
                                 setTutorialStep(4);

@@ -20,6 +20,14 @@ const SCROLL_SENSITIVITY_FINE = 1.01;
 export const DEFAULT_PANEL_FREQ = 240;
 
 
+export interface DailyTrainingBand {
+  id: string;
+  label: string;
+  startFreq: number;
+  endFreq: number;
+  color: string;
+}
+
 interface EQCanvasProps {
   engine: AudioEngine;
   userNodes: EQNodeData[];
@@ -33,6 +41,10 @@ interface EQCanvasProps {
   gainRange?: [number, number];
   isScanning?: boolean;
   onNodeSoloChange?: (isSolo: boolean) => void;
+  dailyTrainingBands?: DailyTrainingBand[];
+  selectedDailyTrainingBandIds?: string[];
+  onDailyTrainingBandSelect?: (bandId: string) => void;
+  maxNodes?: number;
 }
 
 
@@ -144,7 +156,24 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
-export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTarget, allowAddRemoveNodes, listenMode = 'user', onListenModeChange, showGainHint = false, gainRange = [3, 9], isScanning = false, onNodeSoloChange }: EQCanvasProps) {
+export function EQCanvas({ 
+  engine, 
+  userNodes, 
+  targetNodes, 
+  onNodesChange, 
+  showTarget, 
+  allowAddRemoveNodes, 
+  listenMode = 'user', 
+  onListenModeChange, 
+  showGainHint = false, 
+  gainRange = [3, 9], 
+  isScanning = false, 
+  onNodeSoloChange,
+  dailyTrainingBands,
+  selectedDailyTrainingBandIds = [],
+  onDailyTrainingBandSelect,
+  maxNodes = 10
+}: EQCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanStartTimeRef = useRef<number>(0);
@@ -1054,50 +1083,6 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
         }
         ctx.restore();
 
-        // --- LAYER 2: Selected Node Active Fill ---
-        if (!isTarget && fillHoverNodeIdx !== null && latestNodes.length > 0) {
-            if (cachedIndividualResponses.current.width !== dimensions.width || cachedIndividualResponses.current.version !== userNodesVersion.current) {
-                cachedIndividualResponses.current = {
-                    width: dimensions.width,
-                    version: userNodesVersion.current,
-                    resps: engine.getIndividualFrequencyResponses(false, dimensions.width)
-                };
-            }
-            const individualResponses = cachedIndividualResponses.current.resps;
-            const activeIndResp = individualResponses[fillHoverNodeIdx];
-            
-            if (activeIndResp) {
-                const node = latestNodes[fillHoverNodeIdx];
-                const mode = node?.stereoMode || 'Stereo';
-                
-                const { midDb, sideDb, outDb } = activeIndResp;
-                let fillCurve = outDb;
-                let fillColor = 'rgba(255, 200, 0, 0.2)'; // Yellow
-                if (mode === 'Mid') {
-                    fillCurve = midDb;
-                    fillColor = 'rgba(0, 255, 150, 0.2)'; // Green
-                } else if (mode === 'Side') {
-                    fillCurve = sideDb;
-                    fillColor = 'rgba(0, 150, 255, 0.2)'; // Blue
-                }
-
-                ctx.save();
-                ctx.beginPath();
-                for (let x = 0; x < dimensions.width; x++) {
-                    const db = fillCurve[x];
-                    const y = gainToY(db) * dimensions.height;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.lineTo(dimensions.width, midY);
-                ctx.lineTo(0, midY);
-                ctx.closePath();
-                ctx.fillStyle = fillColor;
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-
         const currentListeningIdx = listeningNodeIdxRef.current;
         if (!isTarget && currentListeningIdx !== null && latestNodes.length > 0) {
             const BAND_COLORS = [
@@ -1376,9 +1361,10 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   };
 
   const handleBackgroundDoubleClick = (e: React.MouseEvent) => {
+      e.preventDefault();
       if (listenMode === 'target') onListenModeChange?.('user');
       if (!allowAddRemoveNodes || !containerRef.current) return;
-      if (userNodes.length >= 10) return; // limit to 10 nodes
+      if (userNodes.length >= maxNodes) return; // limit to config nodes
       
       const rect = containerRef.current.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -1403,7 +1389,7 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
   return (
     <div 
       ref={containerRef}
-      className={cn("relative w-full h-full overflow-hidden rounded-xl", activeNodeIdx !== null && "cursor-grabbing")}
+      className={cn("relative w-full h-full overflow-hidden rounded-xl select-none", activeNodeIdx !== null && "cursor-grabbing")}
       style={{ 
         backgroundImage: 'linear-gradient(to bottom, #0b0c10 0%, #1a1c23 50%, #0b0c10 100%)',
         transform: 'translateZ(0)', // Force separate layer for Safari
@@ -1434,7 +1420,43 @@ export function EQCanvas({ engine, userNodes, targetNodes, onNodesChange, showTa
           WebkitBackfaceVisibility: 'hidden'
         }}
       />
-      
+
+      {dailyTrainingBands && dailyTrainingBands.map((band) => {
+        const startX = freqToX(band.startFreq) * 100;
+        const endX = freqToX(band.endFreq) * 100;
+        const width = endX - startX;
+        const isSelected = selectedDailyTrainingBandIds.includes(band.id);
+        
+        return (
+          <div
+            key={band.id}
+            className="absolute top-0 bottom-0 group z-0 cursor-pointer"
+            style={{ left: `${startX}%`, width: `${width}%` }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDailyTrainingBandSelect?.(band.id);
+            }}
+          >
+            {/* Base dim overlay */}
+            <div className={cn(
+              "absolute inset-0 border-x border-white/5 transition-colors rounded-lg mx-[1px]",
+              isSelected ? "bg-transparent border-transparent" : "bg-white/[0.02] group-hover:bg-transparent"
+            )} />
+            {/* Hover/Select highlight overlay */}
+            <div 
+              className={cn(
+                "absolute inset-0 transition-opacity rounded-lg mx-[1px]",
+                isSelected ? "opacity-30" : "opacity-0 group-hover:opacity-20"
+              )}
+              style={{ 
+                backgroundColor: band.color,
+                boxShadow: isSelected ? `0 0 30px ${band.color.replace(',1)', ',0.4)')}` : undefined
+              }}
+            />
+          </div>
+        );
+      })}
+
       {userNodes.map((node, idx) => {
         const xPos = freqToX(node.freq) * dimensions.width;
         const yPos = gainToY(node.gain) * dimensions.height;

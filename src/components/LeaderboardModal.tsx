@@ -4,6 +4,7 @@ import { Trophy, Activity, X, User, Info, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { FirebaseService, LeaderboardEntry } from '../lib/FirebaseService';
 import { auth } from '../lib/firebase';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface LeaderboardModalProps {
   onClose: () => void;
@@ -14,13 +15,15 @@ interface LeaderboardModalProps {
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isLoggedIn, onLogin, masteryScore }) => {
-  const [activeTab, setActiveTab] = useState<'mastery' | 'ami'>('ami');
+  const [activeTab, setActiveTab] = useState<'mastery' | 'ami'>('mastery');
   const [showAmiInfo, setShowAmiInfo] = useState(false);
   const [showMasteryInfo, setShowMasteryInfo] = useState(false);
   const [expandedUid, setExpandedUid] = useState<string | null>(null);
   
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const { t } = useLanguage();
 
   useEffect(() => {
     setIsLoading(true);
@@ -93,7 +96,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
                     className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-3 bg-slate-950 border border-slate-700 rounded-lg shadow-xl text-xs font-normal text-slate-300 z-20 text-left leading-relaxed"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Calculated by algorithm based on 6 core skills (Sense, Precision, Accuracy, Restraint, Timbre, Panning). Filters apply to lower levels. Rewards rigorous, high-quality audio mastering.
+                    {t('ami_desc')}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -130,7 +133,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
                     className="absolute top-full right-0 mt-2 w-64 p-3 bg-slate-950 border border-slate-700 rounded-lg shadow-xl text-xs font-normal text-slate-300 z-20 text-left leading-relaxed"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    Represents your total persistence and effort. Accumulate points across all levels by scoring well and collecting high-star rating rewards.
+                    {t('mastery_score_desc')}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -148,13 +151,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, isL
               <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
                 <User className="w-8 h-8 text-slate-400" />
               </div>
-              <h3 className="text-lg font-bold mb-2">Join the Global Ranking</h3>
-              <p className="text-slate-400 mb-6 max-w-sm text-sm">Sign in to upload your score and see how you rank against audio engineers worldwide.</p>
+              <h3 className="text-lg font-bold mb-2">{t('join_global_ranking')}</h3>
+              <p className="text-slate-400 mb-6 max-w-sm text-sm">{t('join_global_ranking_desc')}</p>
               <button 
                 onClick={onLogin}
                 className="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-cyan-500/20"
               >
-                Sign In
+                {t('sign_in')}
               </button>
             </div>
           ) : (

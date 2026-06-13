@@ -6,6 +6,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v1.2.2",
+    date: "2026.06.13",
+    changes: [
+      "新增功能：引入全新的「每日训练」模式。",
+      "游玩指引：在主页点击「每日训练」即可开启五关随机挑战，在每日训练中,你需要选择受到影响的频段,保持耳朵的敏感度,完成后将点亮个人主页的专属连续打卡天数（小火焰标识）记录！",
+      "体验优化：排行榜增加多语言支持，且默认展示玩家的通关总分 (Mastery Score)。",
+      
+    ]
+  },
+  {
     version: "v1.2.1",
     date: "2026.06.03",
     changes: [

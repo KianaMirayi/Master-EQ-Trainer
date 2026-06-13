@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { PlayerProfileManager, PlayerStats } from '../lib/PlayerProfileManager';
-import { Trophy, Activity, Target, User, CloudUpload, ShieldCheck, ShieldAlert, Edit2, Check, X as CloseIcon, Loader2, RefreshCw } from 'lucide-react';
+import { Trophy, Activity, Target, User, CloudUpload, ShieldCheck, ShieldAlert, Edit2, Check, X as CloseIcon, Loader2, RefreshCw, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FirebaseService } from '../lib/FirebaseService';
 import { FirebaseUser } from '../lib/FirebaseService';
@@ -157,6 +157,10 @@ export function UserProfileDashboard({ stats, user, onLoginToggle }: Props) {
             <h2 className="text-lg font-bold flex items-center gap-2">
               <CloudUpload className="w-4 h-4 text-cyan-400" />
               {t('user_profile')}
+              <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-[12px] font-bold ml-1", stats.dailyTrainingStreak > 0 ? "text-orange-400 bg-orange-400/10" : "text-slate-500 bg-slate-800/80")}>
+                <Flame className={cn("w-3.5 h-3.5", stats.dailyTrainingStreak > 0 ? "" : "opacity-50")} />
+                {stats.dailyTrainingStreak}
+              </div>
             </h2>
             {isLoggedIn && (
                <button 

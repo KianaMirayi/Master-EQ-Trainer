@@ -17,6 +17,13 @@ export const translations = {
     test_mode: "Test Mode",
     peak_rank: "Peak Rank",
     
+    // Leaderboard
+    join_global_ranking: "Join the Global Ranking",
+    join_global_ranking_desc: "Sign in to upload your score and see how you rank against audio engineers worldwide.",
+    sign_in: "Sign In",
+    ami_desc: "Calculated by algorithm based on 6 core skills (Sense, Precision, Accuracy, Restraint, Timbre, Panning). Filters apply to lower levels. Rewards rigorous, high-quality audio mastering.",
+    mastery_score_desc: "Represents your total persistence and effort. Accumulate points across all levels by scoring well and collecting high-star rating rewards.",
+    
     // User Profile
     user_profile: "User Profile & Sync",
     sign_out: "Sign Out",
@@ -196,6 +203,13 @@ export const translations = {
     test_mode: "测试模式",
     peak_rank: "最高排名",
     
+    // 排行榜
+    join_global_ranking: "加入全球排行榜",
+    join_global_ranking_desc: "登录后即可分享你的分数，并看看你在玩家群体中的真实排名。",
+    sign_in: "登录",
+    ami_desc: "通过算法分析 6 个核心维度（听音辨位、绝对精度、稳定发挥、操作克制、音色把控、空间声像）计算得出。排除低等级关卡水分。分数越高说明你越牛逼 但是不高也不要否定自己 这正是你进步的理由",
+    mastery_score_desc: "代表了你的整体毅力和付出。你可以通过多进行闯关挑战以及尽可能达成更高星级的评价来日积月累。",
+
     // 用户资料
     user_profile: "个人资料与同步",
     sign_out: "退出登录",

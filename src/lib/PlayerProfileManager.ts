@@ -17,6 +17,10 @@ export interface PlayerStats {
   extremeGainCount: number;  // 极限增益（大于10dB或小于-10dB）的使用次数
   totalUserQSum: number;     // 玩家设定的Q值总和（用于计算玩家偏好的Q值大小，粗/细）
   totalSweepEvents: number;  // 频率扫频（鼠标拖拽寻找频率）的累计触发次数
+
+  // === 每日训练 / Daily Training ===
+  dailyTrainingStreak: number;
+  lastDailyTrainingDate: string | null;
 }
 
 export const DEFAULT_STATS: PlayerStats = {
@@ -31,6 +35,8 @@ export const DEFAULT_STATS: PlayerStats = {
   extremeGainCount: 0,
   totalUserQSum: 0,
   totalSweepEvents: 0,
+  dailyTrainingStreak: 0,
+  lastDailyTrainingDate: null,
 };
 
 const STORAGE_KEY = 'eq_master_player_stats';
@@ -76,6 +82,19 @@ export class PlayerProfileManager {
 
   static mergeStats(cloudStats: PlayerStats) {
     const local = this.loadStats();
+    
+    let latestStreak = local.dailyTrainingStreak;
+    let latestDate = local.lastDailyTrainingDate;
+
+    if (cloudStats.lastDailyTrainingDate) {
+        if (!local.lastDailyTrainingDate || new Date(cloudStats.lastDailyTrainingDate) > new Date(local.lastDailyTrainingDate)) {
+            latestStreak = cloudStats.dailyTrainingStreak;
+            latestDate = cloudStats.lastDailyTrainingDate;
+        } else if (local.lastDailyTrainingDate === cloudStats.lastDailyTrainingDate) {
+            latestStreak = Math.max(local.dailyTrainingStreak, cloudStats.dailyTrainingStreak);
+        }
+    }
+
     const merged: PlayerStats = {
       ...local,
       levelsPlayed: Math.max(local.levelsPlayed, cloudStats.levelsPlayed),
@@ -89,9 +108,45 @@ export class PlayerProfileManager {
       totalUserQSum: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalUserQSum : local.totalUserQSum,
       totalSweepEvents: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.totalSweepEvents : local.totalSweepEvents,
       extremeGainCount: cloudStats.levelsPlayed > local.levelsPlayed ? cloudStats.extremeGainCount : local.extremeGainCount,
+      dailyTrainingStreak: latestStreak,
+      lastDailyTrainingDate: latestDate,
     };
     this.saveStats(merged);
     return merged;
+  }
+
+  static recordDailyTraining() {
+    const stats = this.loadStats();
+    
+    // Use local date string (YYYY-MM-DD)
+    const today = new Date().toLocaleDateString('en-CA'); // e.g. 2026-06-13
+    
+    if (stats.lastDailyTrainingDate === today) {
+        // Already completed today, do nothing
+        return stats;
+    }
+    
+    if (!stats.lastDailyTrainingDate) {
+        // First time
+        stats.dailyTrainingStreak = 1;
+    } else {
+        const lastDate = new Date(stats.lastDailyTrainingDate);
+        const currentDate = new Date(today);
+        const diffTime = Math.abs(currentDate.getTime() - lastDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) {
+            // Consecutive day
+            stats.dailyTrainingStreak += 1;
+        } else if (diffDays > 1) {
+            // Streak broken
+            stats.dailyTrainingStreak = 1;
+        }
+    }
+    
+    stats.lastDailyTrainingDate = today;
+    this.saveStats(stats);
+    return stats;
   }
 
   static resetStats() {
