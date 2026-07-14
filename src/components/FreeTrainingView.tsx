@@ -74,8 +74,12 @@ export function FreeTrainingView({ onBack, selectedTrackId, selectedRandomTags }
   useEffect(() => {
     if (!engine) return;
     let frameId: number;
+    let lastPlaying = engine.isPlaying;
     const syncState = () => {
-      setIsPlaying(engine.isPlaying);
+      if (engine.isPlaying !== lastPlaying) {
+          setIsPlaying(engine.isPlaying);
+          lastPlaying = engine.isPlaying;
+      }
       frameId = requestAnimationFrame(syncState);
     };
     syncState();

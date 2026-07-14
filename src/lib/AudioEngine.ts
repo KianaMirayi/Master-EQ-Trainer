@@ -586,8 +586,14 @@ export class AudioEngine {
     return responses;
   }
 
+  private _resBuffers = {
+    target: { midTotalMag: new Float32Array(0), sideTotalMag: new Float32Array(0), midOutDb: new Float32Array(0), sideOutDb: new Float32Array(0) },
+    user: { midTotalMag: new Float32Array(0), sideTotalMag: new Float32Array(0), midOutDb: new Float32Array(0), sideOutDb: new Float32Array(0) }
+  };
+
   getFrequencyResponse(isTarget: boolean, width: number): { mid: Float32Array, side: Float32Array } {
     const graph = isTarget ? this.targetGraph : this.userGraph;
+    const buffers = isTarget ? this._resBuffers.target : this._resBuffers.user;
     
     if (!this.freqBuffer || this.freqBuffer.length !== width) {
       this.freqBuffer = new Float32Array(width);
@@ -601,36 +607,59 @@ export class AudioEngine {
       }
     }
 
-    const midTotalMag = new Float32Array(width).fill(1);
-    const sideTotalMag = new Float32Array(width).fill(1);
+    if (buffers.midTotalMag.length !== width) {
+        buffers.midTotalMag = new Float32Array(width);
+        buffers.sideTotalMag = new Float32Array(width);
+        buffers.midOutDb = new Float32Array(width);
+        buffers.sideOutDb = new Float32Array(width);
+    }
+
+    buffers.midTotalMag.fill(1);
+    buffers.sideTotalMag.fill(1);
     
     if (graph) {
-      graph.midFilters.forEach(f => {
-          f.getFrequencyResponse(this.freqBuffer!, this.magBuffer!, this.phaseBuffer!);
-          for(let i = 0; i < width; i++) {
-              midTotalMag[i] *= this.magBuffer![i];
+      const midFilters = graph.midFilters;
+      const midLen = midFilters.length;
+      for (let i = 0; i < midLen; i++) {
+          midFilters[i].getFrequencyResponse(this.freqBuffer, this.magBuffer!, this.phaseBuffer!);
+          const mag = this.magBuffer!;
+          const midTot = buffers.midTotalMag;
+          for(let j = 0; j < width; j++) {
+              midTot[j] *= mag[j];
           }
-      });
+      }
 
-      graph.sideFilters.forEach(f => {
-          f.getFrequencyResponse(this.freqBuffer!, this.magBuffer!, this.phaseBuffer!);
-          for(let i = 0; i < width; i++) {
-              sideTotalMag[i] *= this.magBuffer![i];
+      const sideFilters = graph.sideFilters;
+      const sideLen = sideFilters.length;
+      for (let i = 0; i < sideLen; i++) {
+          sideFilters[i].getFrequencyResponse(this.freqBuffer, this.magBuffer!, this.phaseBuffer!);
+          const mag = this.magBuffer!;
+          const sideTot = buffers.sideTotalMag;
+          for(let j = 0; j < width; j++) {
+              sideTot[j] *= mag[j];
           }
-      });
+      }
     }
 
-    const midOutDb = new Float32Array(width);
-    const sideOutDb = new Float32Array(width);
+    const midTot = buffers.midTotalMag;
+    const sideTot = buffers.sideTotalMag;
+    const midOut = buffers.midOutDb;
+    const sideOut = buffers.sideOutDb;
     for(let i = 0; i < width; i++) {
-        midOutDb[i] = 20 * Math.log10(midTotalMag[i] || 1);
-        sideOutDb[i] = 20 * Math.log10(sideTotalMag[i] || 1);
+        midOut[i] = 20 * Math.log10(midTot[i] || 1);
+        sideOut[i] = 20 * Math.log10(sideTot[i] || 1);
     }
-    return { mid: midOutDb, side: sideOutDb };
+    return { mid: midOut, side: sideOut };
   }
 
+  private _masterLevel = { rms: -100, peak: -100 };
+
   getMasterLevel(): { rms: number, peak: number } {
-    if (!this.isPlaying) return { rms: -100, peak: -100 };
+    if (!this.isPlaying) {
+      this._masterLevel.rms = -100;
+      this._masterLevel.peak = -100;
+      return this._masterLevel;
+    }
     const fftSize = this.masterAnalyser.fftSize;
     if (!this.levelBuffer || this.levelBuffer.length !== fftSize) {
       this.levelBuffer = new Float32Array(fftSize);
@@ -647,9 +676,8 @@ export class AudioEngine {
     
     const rms = Math.sqrt(sum / fftSize);
     
-    return {
-        rms: rms > 0 ? 20 * Math.log10(rms) : -100,
-        peak: peak > 0 ? 20 * Math.log10(peak) : -100
-    };
+    this._masterLevel.rms = rms > 0 ? 20 * Math.log10(rms) : -100;
+    this._masterLevel.peak = peak > 0 ? 20 * Math.log10(peak) : -100;
+    return this._masterLevel;
   }
 }

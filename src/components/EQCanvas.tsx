@@ -156,6 +156,23 @@ const FilterTypeIcon = ({ type, className }: { type: 'peaking' | 'lowshelf' | 'h
     return null;
 }
 
+const FREQ_TICKS = [
+  20, 30, 40, 50, 60, 70, 80, 90, 100, 
+  200, 300, 400, 500, 600, 700, 800, 900, 1000, 
+  2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000
+];
+const FREQ_LABELS: Record<number, string> = {
+  20: '20', 30: '30', 50: '50', 70: '70', 100: '100', 
+  200: '200', 300: '300', 500: '500', 700: '700', 1000: '1k', 
+  2000: '2k', 3000: '3k', 5000: '5k', 7000: '7k', 10000: '10k', 20000: '20k'
+};
+const GAIN_TICKS = [12, 9, 6, 3, 0, -3, -6, -9, -12];
+const AMP_TICKS = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90];
+const BAND_COLORS_RGB = [
+  '239, 68, 68', '249, 115, 22', '234, 179, 8', '34, 197, 94', 
+  '6, 182, 212', '59, 130, 246', '168, 85, 247', '236, 72, 153'
+];
+
 export function EQCanvas({ 
   engine, 
   userNodes, 
@@ -538,6 +555,8 @@ export function EQCanvas({
     return () => observer.disconnect();
   }, []);
 
+  const lastDrawTimeRef = useRef<number>(0);
+
   // Animation Loop for Spectrum & EQ Curve
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -551,9 +570,24 @@ export function EQCanvas({
     canvas.height = dimensions.height * dpr;
     ctx.scale(dpr, dpr);
 
+    const isLowEndDevice = typeof navigator !== 'undefined' && (
+      ((navigator as any).deviceMemory && (navigator as any).deviceMemory < 4) ||
+      ((navigator as any).hardwareConcurrency && (navigator as any).hardwareConcurrency <= 4)
+    );
+    const TARGET_FPS = isLowEndDevice ? 30 : 60;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
     let frameId: number;
     const draw = () => {
+      frameId = requestAnimationFrame(draw);
+
       const now = performance.now();
+      const dt = now - lastDrawTimeRef.current;
+      if (dt < FRAME_INTERVAL) {
+          return;
+      }
+      lastDrawTimeRef.current = now - (dt % FRAME_INTERVAL);
+
       const elapsedScan = scanStartTimeRef.current > 0 ? (now - scanStartTimeRef.current) : 0;
       let scanPhase = -1;
       let scanProgress = 1;
@@ -590,30 +624,21 @@ export function EQCanvas({
       // --- Draw Grid ---
       ctx.lineWidth = 1;
 
-      const FREQ_TICKS = [
-        20, 30, 40, 50, 60, 70, 80, 90, 100, 
-        200, 300, 400, 500, 600, 700, 800, 900, 1000, 
-        2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000
-      ];
-      const FREQ_LABELS: Record<number, string> = {
-        20: '20', 30: '30', 50: '50', 70: '70', 100: '100', 
-        200: '200', 300: '300', 500: '500', 700: '700', 1000: '1k', 
-        2000: '2k', 3000: '3k', 5000: '5k', 7000: '7k', 10000: '10k', 20000: '20k'
-      };
-
       // Batch grid lines
       ctx.beginPath();
-      FREQ_TICKS.forEach(freq => {
+      for (let i = 0; i < FREQ_TICKS.length; i++) {
+        const freq = FREQ_TICKS[i];
         const x = freqToX(freq) * dimensions.width;
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dimensions.height);
-      });
+      }
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
       ctx.stroke();
 
-      FREQ_TICKS.forEach(freq => {
-        const isMajorHighlight = [20, 200, 2000, 20000].includes(freq);
-        const isMinorHighlight = [50, 500, 5000].includes(freq);
+      for (let i = 0; i < FREQ_TICKS.length; i++) {
+        const freq = FREQ_TICKS[i];
+        const isMajorHighlight = freq === 20 || freq === 200 || freq === 2000 || freq === 20000;
+        const isMinorHighlight = freq === 50 || freq === 500 || freq === 5000;
         const x = freqToX(freq) * dimensions.width;
         
         if (isMajorHighlight || isMinorHighlight) {
@@ -635,15 +660,15 @@ export function EQCanvas({
 
         ctx.textBaseline = 'bottom';
         if (FREQ_LABELS[freq]) ctx.fillText(FREQ_LABELS[freq], textX, dimensions.height - 8);
-      });
+      }
 
       ctx.beginPath();
-      const GAIN_TICKS = [12, 9, 6, 3, 0, -3, -6, -9, -12];
-      GAIN_TICKS.forEach(gain => {
+      for (let i = 0; i < GAIN_TICKS.length; i++) {
+        const gain = GAIN_TICKS[i];
         const y = gainToY(gain) * dimensions.height;
         ctx.moveTo(0, y);
         ctx.lineTo(dimensions.width, y);
-      });
+      }
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -656,7 +681,8 @@ export function EQCanvas({
       ctx.stroke();
 
       ctx.textAlign = 'right';
-      GAIN_TICKS.forEach(gain => {
+      for (let i = 0; i < GAIN_TICKS.length; i++) {
+        const gain = GAIN_TICKS[i];
         const y = gainToY(gain) * dimensions.height;
         let textY = y;
         if (gain === 12) { ctx.textBaseline = 'top'; textY = y + 12; } 
@@ -664,12 +690,12 @@ export function EQCanvas({
         else ctx.textBaseline = 'middle';
         ctx.fillStyle = gain === 0 ? 'rgba(234, 179, 8, 0.8)' : 'rgba(255, 255, 255, 0.4)';
         ctx.fillText(`${gain > 0 ? '+' : ''}${gain} dB`, dimensions.width - 6, textY);
-      });
+      }
 
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      const AMP_TICKS = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90];
-      AMP_TICKS.forEach(amp => {
+      for (let i = 0; i < AMP_TICKS.length; i++) {
+        const amp = AMP_TICKS[i];
         const normalizedDb = Math.max(0, Math.min(1, (amp - (-100)) / (0 - (-100))));
         let y = dimensions.height - normalizedDb * dimensions.height;
         if (amp === 0) { ctx.textBaseline = 'top'; y = y + 12; } 
@@ -677,7 +703,7 @@ export function EQCanvas({
         else ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.fillText(`${amp}`, 12, y);
-      });
+      }
 
       // --- Draw Global Gain Hints ---
       if (showGainHint) {
@@ -912,8 +938,18 @@ export function EQCanvas({
           }
       };
 
+      const EMPTY_DASHES: number[] = [];
+      const TARGET_DASHES: number[] = [6, 4];
+      const interpolateColor = (r1: number, g1: number, b1: number, a1: number, r2: number, g2: number, b2: number, a2: number, factor: number) => {
+          const r = Math.round(r1 + factor * (r2 - r1));
+          const g = Math.round(g1 + factor * (g2 - g1));
+          const b = Math.round(b1 + factor * (b2 - b1));
+          const a = a1 + factor * (a2 - a1);
+          return `rgba(${r}, ${g}, ${b}, ${a})`;
+      };
+
       // --- Draw EQ curves ---
-      const drawCurve = (isTarget: boolean, color: string, dashes: number[] = []) => {
+      const drawCurve = (isTarget: boolean, color: string, dashes: number[] = EMPTY_DASHES) => {
         const cached = getCachedResponse(isTarget);
         const midResponse = cached.mid;
         const sideResponse = cached.side;
@@ -931,9 +967,19 @@ export function EQCanvas({
 
         let isPureStereo = true;
         if (isTarget && targetNodes) {
-            isPureStereo = !targetNodes.some(node => (node.stereoMode === 'Mid' || node.stereoMode === 'Side'));
+            for (let i = 0; i < targetNodes.length; i++) {
+                if (targetNodes[i].stereoMode === 'Mid' || targetNodes[i].stereoMode === 'Side') {
+                    isPureStereo = false;
+                    break;
+                }
+            }
         } else if (!isTarget) {
-            isPureStereo = !latestNodes.some(node => node.enabled !== false && (node.stereoMode === 'Mid' || node.stereoMode === 'Side'));
+            for (let i = 0; i < latestNodes.length; i++) {
+                if (latestNodes[i].enabled !== false && (latestNodes[i].stereoMode === 'Mid' || latestNodes[i].stereoMode === 'Side')) {
+                    isPureStereo = false;
+                    break;
+                }
+            }
         }
 
         // --- LAYER 1: Global Curves ---
@@ -990,21 +1036,12 @@ export function EQCanvas({
                 }
             }
 
-            const interpolateColor = (c1: [number,number,number,number], c2: [number,number,number,number], factor: number) => {
-                const r = Math.round(c1[0] + factor * (c2[0] - c1[0]));
-                const g = Math.round(c1[1] + factor * (c2[1] - c1[1]));
-                const b = Math.round(c1[2] + factor * (c2[2] - c1[2]));
-                const a = c1[3] + factor * (c2[3] - c1[3]);
-                return `rgba(${r}, ${g}, ${b}, ${a})`;
-            };
+            const interpolateColorLocal = interpolateColor;
 
-            const baseColorRGB: [number, number, number] = isTarget ? [168, 85, 247] : [234, 179, 8];
-
-            const midBase: [number, number, number, number] = [...baseColorRGB, midBaseAlpha] as [number, number, number, number];
-            const sideBaseMerged: [number, number, number, number] = [...baseColorRGB, 0] as [number, number, number, number];
-            
-            const GREEN: [number, number, number, number] = [34, 197, 94, midBaseAlpha];
-            const BLUE: [number, number, number, number] = [59, 130, 246, sideBaseAlpha];
+            let br = 234, bg = 179, bb = 8;
+            if (isTarget) {
+                br = 168; bg = 85; bb = 247;
+            }
 
             const midGradient = ctx.createLinearGradient(0, 0, dimensions.width, 0);
             const sideGradient = ctx.createLinearGradient(0, 0, dimensions.width, 0);
@@ -1016,16 +1053,16 @@ export function EQCanvas({
                     const delta = Math.abs(midResponse[x] - sideResponse[x]);
                     let factor = Math.min(1, delta / MERGE_THRESHOLD);
                     const offset = x / (dimensions.width - 1);
-                    midGradient.addColorStop(offset, interpolateColor(midBase, GREEN, factor));
-                    sideGradient.addColorStop(offset, interpolateColor(sideBaseMerged, BLUE, factor));
+                    midGradient.addColorStop(offset, interpolateColorLocal(br, bg, bb, midBaseAlpha, 34, 197, 94, midBaseAlpha, factor));
+                    sideGradient.addColorStop(offset, interpolateColorLocal(br, bg, bb, 0, 59, 130, 246, sideBaseAlpha, factor));
                     lastOffset = offset;
                 }
                 if (lastOffset < 1) {
                     const x = dimensions.width - 1;
                     const delta = Math.abs(midResponse[x] - sideResponse[x]);
                     let factor = Math.min(1, delta / MERGE_THRESHOLD);
-                    midGradient.addColorStop(1, interpolateColor(midBase, GREEN, factor));
-                    sideGradient.addColorStop(1, interpolateColor(sideBaseMerged, BLUE, factor));
+                    midGradient.addColorStop(1, interpolateColorLocal(br, bg, bb, midBaseAlpha, 34, 197, 94, midBaseAlpha, factor));
+                    sideGradient.addColorStop(1, interpolateColorLocal(br, bg, bb, 0, 59, 130, 246, sideBaseAlpha, factor));
                 }
             }
 
@@ -1085,11 +1122,7 @@ export function EQCanvas({
 
         const currentListeningIdx = listeningNodeIdxRef.current;
         if (!isTarget && currentListeningIdx !== null && latestNodes.length > 0) {
-            const BAND_COLORS = [
-              '239, 68, 68', '249, 115, 22', '234, 179, 8', '34, 197, 94', 
-              '6, 182, 212', '59, 130, 246', '168, 85, 247', '236, 72, 153'
-            ];
-            const bandColor = BAND_COLORS[currentListeningIdx % BAND_COLORS.length];
+            const bandColor = BAND_COLORS_RGB[currentListeningIdx % BAND_COLORS_RGB.length];
             // stroke the listened band
             const node = latestNodes[currentListeningIdx];
             if (node) {
@@ -1115,7 +1148,7 @@ export function EQCanvas({
       };
 
       if (showTarget) {
-        drawCurve(true, '#a855f7', [6, 4]); // Purple dashed
+        drawCurve(true, '#a855f7', TARGET_DASHES);
       }
       drawCurve(false, '#eab308'); // Main curve yellow
 
@@ -1126,27 +1159,29 @@ export function EQCanvas({
           ctx.save();
           const drawWidth = dimensions.width * scanProgress;
           
-          for (let x = 0; x < drawWidth; x++) {
+          for (let x = 0; x < drawWidth; x += 4) {
               const diff = Math.abs(tgtMid[x] - usrMid[x]);
               const tY = gainToY(tgtMid[x]) * dimensions.height;
               const uY = gainToY(usrMid[x]) * dimensions.height;
               
               if (diff < 1.0) {
-                  ctx.strokeStyle = `rgba(250, 204, 21, ${(1 - diff) * 0.5 * effectFade})`;
+                  const alpha = (1 - diff) * 0.5 * effectFade;
+                  ctx.strokeStyle = `rgba(250, 204, 21, ${alpha.toFixed(2)})`;
                   ctx.beginPath();
                   ctx.moveTo(x, Math.min(tY, uY) - 5);
                   ctx.lineTo(x, Math.max(tY, uY) + 5);
                   ctx.stroke();
               } else if (diff > 4.0) {
                   const pulse = (Math.sin(now / 150 + x / 30) + 1) / 2;
-                  ctx.strokeStyle = `rgba(239, 68, 68, ${Math.min(0.4, (diff - 4) * 0.1) * pulse * effectFade})`;
+                  const alpha = Math.min(0.4, (diff - 4) * 0.1) * pulse * effectFade;
+                  ctx.strokeStyle = `rgba(239, 68, 68, ${alpha.toFixed(2)})`;
                   ctx.beginPath();
                   ctx.moveTo(x, tY);
                   ctx.lineTo(x, uY);
                   ctx.stroke();
               }
           }
-          
+
           if (scanPhase === 1) {
               const scanX = dimensions.width * scanProgress;
               const grad = ctx.createLinearGradient(scanX - 50, 0, scanX, 0);
@@ -1168,7 +1203,6 @@ export function EQCanvas({
           ctx.restore();
       }
 
-      frameId = requestAnimationFrame(draw);
     };
 
     draw();
@@ -1334,7 +1368,9 @@ export function EQCanvas({
 
   const handleWheel = (e: WheelEvent, idx: number) => {
       e.stopPropagation();
-      e.preventDefault();
+      if (e.cancelable) {
+          e.preventDefault();
+      }
       if (listenMode === 'target') onListenModeChange?.('user');
       const newNodes = [...userNodes];
       const newNode = { ...newNodes[idx] };

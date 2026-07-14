@@ -18,7 +18,8 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(engine?.isPlaying || false);
   const [isLooping, setIsLooping] = useState(engine?.isLooping || false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
+  const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const [duration, setDuration] = useState(0);
   const [loopStart, setLoopStart] = useState(engine?.loopStart || 0);
   const [loopEnd, setLoopEnd] = useState(engine?.loopEnd || 0);
@@ -59,14 +60,98 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [engine]);
 
-  // Poll for time and state updates
+  // Poll for time and state updates and draw dynamic canvas
   useEffect(() => {
     if (!engine) return;
     let frameId: number;
+    let lastTime = -1;
+    let lastDrawTime = 0;
+
+    const formatTime = (time: number) => {
+      const m = Math.floor(time / 60);
+      const s = Math.floor(time % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const isLowEndDevice = typeof navigator !== 'undefined' && (
+      ((navigator as any).deviceMemory && (navigator as any).deviceMemory < 4) ||
+      ((navigator as any).hardwareConcurrency && (navigator as any).hardwareConcurrency <= 4)
+    );
+    const TARGET_FPS = isLowEndDevice ? 30 : 60;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
     const update = () => {
+      frameId = requestAnimationFrame(update);
+      const now = performance.now();
+      const dt = now - lastDrawTime;
+      if (dt < FRAME_INTERVAL) {
+          return;
+      }
+      lastDrawTime = now - (dt % FRAME_INTERVAL);
       setIsPlaying(engine.isPlaying);
       setIsLooping(engine.isLooping);
-      setCurrentTime(engine.getCurrentTime());
+      
+      const t = engine.getCurrentTime();
+      currentTimeRef.current = t;
+      
+      if (Math.abs(t - lastTime) > 0.01) {
+          lastTime = t;
+          if (timeDisplayRef.current) {
+              timeDisplayRef.current.textContent = formatTime(t);
+          }
+
+          // Draw dynamic canvas
+          const canvas = canvasRef.current;
+          const container = containerRef.current;
+          if (canvas && container) {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                  const width = container.clientWidth;
+                  const height = 64;
+                  if (width > 0) {
+                      ctx.clearRect(0, 0, width, height);
+
+                      // Draw cached waveform
+                      if (waveformPathRef.current) {
+                          ctx.strokeStyle = '#3b82f6';
+                          ctx.lineWidth = 1;
+                          ctx.stroke(waveformPathRef.current);
+                      }
+
+                      // Draw Loop region
+                      if (engine.isLooping && engine.buffer && engine.buffer.duration > 0) {
+                          const loopStartVal = engine.loopStart || 0;
+                          const loopEndVal = engine.loopEnd || engine.buffer.duration;
+                          const startX = (loopStartVal / engine.buffer.duration) * width;
+                          const endX = (loopEndVal / engine.buffer.duration) * width;
+                          ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+                          ctx.fillRect(startX, 0, endX - startX, height);
+                          
+                          ctx.beginPath();
+                          ctx.moveTo(startX, 0);
+                          ctx.lineTo(startX, height);
+                          ctx.moveTo(endX, 0);
+                          ctx.lineTo(endX, height);
+                          ctx.strokeStyle = '#38bdf8';
+                          ctx.lineWidth = 2;
+                          ctx.stroke();
+                      }
+
+                      // Draw playhead
+                      if (engine.buffer && engine.buffer.duration > 0) {
+                          const playheadX = (t / engine.buffer.duration) * width;
+                          ctx.beginPath();
+                          ctx.moveTo(playheadX, 0);
+                          ctx.lineTo(playheadX, height);
+                          ctx.strokeStyle = '#ffffff';
+                          ctx.lineWidth = 2;
+                          ctx.stroke();
+                      }
+                  }
+              }
+          }
+      }
+
       if (engine.buffer) {
         setDuration(engine.buffer.duration);
         if (engine.loopEnd === 0) {
@@ -76,7 +161,6 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
             setLoopEnd(engine.loopEnd);
         }
       }
-      frameId = requestAnimationFrame(update);
     };
     update();
     return () => cancelAnimationFrame(frameId);
@@ -123,55 +207,6 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
     }
     waveformPathRef.current = path;
   }, [engine.buffer, dimensions.width]); // dimensions.width is derived from resize observer
-
-  // Draw Loop Overlay & Playhead (Dynamic)
-  useEffect(() => {
-    if (!canvasRef.current || !containerRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = dimensions.width;
-    const height = 64;
-    if (width === 0) return;
-
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw cached waveform
-    if (waveformPathRef.current) {
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 1;
-        ctx.stroke(waveformPathRef.current);
-    }
-
-    // Draw Loop region
-    if (isLooping && duration > 0) {
-        const startX = (loopStart / duration) * width;
-        const endX = (loopEnd / duration) * width;
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-        ctx.fillRect(startX, 0, endX - startX, height);
-        
-        ctx.beginPath();
-        ctx.moveTo(startX, 0);
-        ctx.lineTo(startX, height);
-        ctx.moveTo(endX, 0);
-        ctx.lineTo(endX, height);
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-
-    // Draw playhead
-    if (duration > 0) {
-        const playheadX = (currentTime / duration) * width;
-        ctx.beginPath();
-        ctx.moveTo(playheadX, 0);
-        ctx.lineTo(playheadX, height);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-  }, [currentTime, isLooping, loopStart, loopEnd, duration, dimensions.width]);
 
   const togglePlay = () => {
       if (!engine) return;
@@ -342,7 +377,7 @@ export const WaveformPlayer = React.memo(({ engine, isLoadingTrack, trackName, t
         </button>
       </div>
       <div className="flex justify-between text-[10px] text-slate-500 font-mono px-14">
-          <span>{formatTime(currentTime)}</span>
+          <span ref={timeDisplayRef}>0:00</span>
           <span className="text-slate-400">Alt+Drag to loop region</span>
           <span>{formatTime(duration)}</span>
       </div>

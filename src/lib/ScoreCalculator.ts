@@ -104,16 +104,21 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
     const targetMode = target.stereoMode || 'Stereo';
     const userMode = userMatched.stereoMode || 'Stereo';
     
+    let isModeMismatch = false;
+
     // Type mismatch is no longer an absolute veto, but a harsh penalty (Max 10 pts)
     if (target.type !== userMatched.type) {
         isTypeMismatch = true;
-        penaltyReason = `Type Mismatch Penalty (${target.type} vs ${userMatched.type})`;
+        penaltyReason = `Type Mismatch (${target.type} vs ${userMatched.type})`;
     } 
     
     if (targetMode !== userMode) {
-        isVetoed = true;
-        vetoReason = `M/S Strategy Mismatch (${targetMode} vs ${userMode})`;
-    } else if (target.gain * userMatched.gain < 0) {
+        isModeMismatch = true;
+        const msg = `M/S Strategy Mismatch (${targetMode} vs ${userMode})`;
+        penaltyReason = penaltyReason ? `${penaltyReason}, ${msg}` : msg;
+    }
+    
+    if (target.gain * userMatched.gain < 0) {
         // One is positive, one is negative
         isVetoed = true;
         vetoReason = 'Opposite Gain Direction';
@@ -132,25 +137,41 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
             userNode: userMatched,
             isVetoed,
             vetoReason,
+            penaltyReason: (isVetoed && !vetoReason) ? penaltyReason : vetoReason,
             Sf: 0, Sg: 0, Sq: 0, baseScore: 0, weight
         });
         continue;
     }
     
     // 3. Calculate Component Scores
-    // Sf: Frequency error in octaves. If off by 1 octave, 0 points.
+    // Sf: Frequency error in octaves. Deadzone 0.1 octaves. Max 1.0 error.
     const octaveErr = Math.abs(Math.log2(userMatched.freq / target.freq));
-    let Sf = Math.max(0, 50 * (1 - octaveErr / 1.0)); 
+    let Sf = 0;
+    if (octaveErr <= 0.1) {
+        Sf = 50;
+    } else {
+        const effectiveErr = octaveErr - 0.1;
+        Sf = Math.max(0, 50 * (1 - effectiveErr / 0.9));
+    }
     
-    // Sg: Gain error in dB. If off by >6dB, 0 points.
+    // Sg: Gain error in dB. Deadzone 0.5dB. Max 6.0 error.
     const gainErr = Math.abs(target.gain - userMatched.gain);
-    let Sg = Math.max(0, 30 * (1 - gainErr / 6.0));
+    let Sg = 0;
+    if (gainErr <= 0.5) {
+        Sg = 30;
+    } else {
+        const effectiveGainErr = gainErr - 0.5;
+        Sg = Math.max(0, 30 * (1 - effectiveGainErr / 5.5));
+    }
     
-    // Sq: Q error. If off by > 2.0, 0 points.
+    // Sq: Q error. Uses ratio for logarithmic perception.
     let Sq = 0;
     if (target.type === 'peaking') {
-        const qErr = Math.abs((target.q || 1) - (userMatched.q || 1));
-        Sq = Math.max(0, 20 * (1 - qErr / 2.0));
+        const targetQ = target.q || 1;
+        const userQ = userMatched.q || 1;
+        const qRatio = Math.max(targetQ / userQ, userQ / targetQ);
+        // A ratio of 1 gets 20 pts. A ratio of >=3 gets 0 pts.
+        Sq = Math.max(0, 20 * (1 - (qRatio - 1) / 2.0));
     } else {
         // Highshelf/Lowshelf usually have fixed Q or less important Q in this context
         Sq = 20; 
@@ -162,6 +183,13 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
         Sg *= 0.1;
         Sq *= 0.1;
     }
+    
+    // Apply mode mismatch penalty (Half score)
+    if (isModeMismatch) {
+        Sf *= 0.5;
+        Sg *= 0.5;
+        Sq *= 0.5;
+    }
 
     const baseScore = Sf + Sg + Sq;
     
@@ -169,7 +197,7 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
         targetNode: target,
         userNode: userMatched,
         isVetoed: false,
-        penaltyReason: isTypeMismatch ? penaltyReason : undefined,
+        penaltyReason: (isTypeMismatch || isModeMismatch) ? penaltyReason : undefined,
         Sf, Sg, Sq, baseScore, weight
     });
   }
@@ -192,9 +220,16 @@ export function calculateLevelScore(targetNodes: EQNodeData[], userNodes: EQNode
   if (totalScore < passThreshold) {
       stars = 0; // Fail 
   } else {
-      if (totalScore < 70) stars = 1;
-      else if (totalScore < 90) stars = 2;
-      else stars = 3;
+      const twoStarOffset = levelId <= 60 ? 10 : 8;
+      const threeStarOffset = levelId <= 60 ? 15 : 11;
+      
+      if (totalScore >= passThreshold + threeStarOffset) {
+          stars = 3;
+      } else if (totalScore >= passThreshold + twoStarOffset) {
+          stars = 2;
+      } else {
+          stars = 1;
+      }
   }
   
   return { nodeReports: reports, totalScore, stars };

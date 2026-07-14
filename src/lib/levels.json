@@ -373,8 +373,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.9,
-        "shelf": 0.1
+        "bell": 1,
+        "shelf": 0
       },
       "freqPools": [
         "AA",
@@ -408,8 +408,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.9,
-        "shelf": 0.1
+        "bell": 1,
+        "shelf": 0
       },
       "freqPools": [
         "BA",
@@ -443,8 +443,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.8,
-        "shelf": 0.2
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "AA",
@@ -496,8 +496,8 @@
         "shelf"
       ],
       "filterWeights": {
-        "bell": 0.8,
-        "shelf": 0.2
+        "bell": 0.9,
+        "shelf": 0.1
       },
       "freqPools": [
         "AA",

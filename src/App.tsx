@@ -413,7 +413,7 @@ export default function App() {
                     </div>
                     <ul className={cn("list-disc pl-4 space-y-1.5 text-sm", index === 0 ? "text-slate-300" : "text-slate-400")}>
                       {log.changes.map((change, i) => (
-                        <li key={i}>{change}</li>
+                        <li key={i} dangerouslySetInnerHTML={{ __html: change }}></li>
                       ))}
                     </ul>
                   </div>

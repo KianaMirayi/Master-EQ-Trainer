@@ -42,9 +42,27 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d')!;
+    const isLowEndDevice = typeof navigator !== 'undefined' && (
+      ((navigator as any).deviceMemory && (navigator as any).deviceMemory < 4) ||
+      ((navigator as any).hardwareConcurrency && (navigator as any).hardwareConcurrency <= 4)
+    );
+    const TARGET_FPS = isLowEndDevice ? 30 : 60;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+    let lastDrawTime = 0;
+
     let frameId: number;
 
-    const draw = () => {
+      let cachedGradient: CanvasGradient | null = null;
+      let cachedGradientHeight = -1;
+
+      const draw = () => {
+      frameId = requestAnimationFrame(draw);
+      const now = performance.now();
+      const dt = now - lastDrawTime;
+      if (dt < FRAME_INTERVAL) {
+          return;
+      }
+      lastDrawTime = now - (dt % FRAME_INTERVAL);
       ctx.clearRect(0, 0, width, height);
 
       const levels = engine.getMasterLevel();
@@ -79,8 +97,8 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
       const meterWidth = 8;
       const meterX = width > 30 ? 24 : 10;
       const meterTop = 20;
-      const meterHeight = Math.max(10, height - 40); 
-      
+      const meterHeight = Math.max(10, height - 40);
+       
       const MIN_DB = -90;
       const MAX_DB = 0;
       
@@ -123,20 +141,22 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
       ctx.strokeRect(meterX, meterTop, meterWidth, meterHeight);
 
-      // Gradient based on exact normalized breakpoints
-      const gradient = ctx.createLinearGradient(0, meterTop + meterHeight, 0, meterTop);
-      gradient.addColorStop(0, '#22c55e');
-      gradient.addColorStop(dbToNormalized(-18), '#22c55e');
-      gradient.addColorStop(dbToNormalized(-9), '#eab308');
-      gradient.addColorStop(dbToNormalized(-3), '#ef4444');
-      gradient.addColorStop(1, '#ef4444');
-      
+      if (!cachedGradient || cachedGradientHeight !== height) {
+          cachedGradientHeight = height;
+          cachedGradient = ctx.createLinearGradient(0, meterTop + meterHeight, 0, meterTop);
+          cachedGradient.addColorStop(0, '#22c55e');
+          cachedGradient.addColorStop(dbToNormalized(-18), '#22c55e');
+          cachedGradient.addColorStop(dbToNormalized(-9), '#eab308');
+          cachedGradient.addColorStop(dbToNormalized(-3), '#ef4444');
+          cachedGradient.addColorStop(1, '#ef4444');
+      }
+
       // Peak Bar
       const peakY = dbToMeterY(meter.peak);
       const peakFillHeight = (meterTop + meterHeight) - peakY;
       if (peakFillHeight > 0) {
           ctx.globalAlpha = 0.5;
-          ctx.fillStyle = gradient;
+          ctx.fillStyle = cachedGradient;
           ctx.fillRect(meterX, peakY, meterWidth, peakFillHeight);
           ctx.globalAlpha = 1.0;
       }
@@ -145,7 +165,7 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
       const rmsY = dbToMeterY(meter.rms);
       const rmsFillHeight = (meterTop + meterHeight) - rmsY;
       if (rmsFillHeight > 0) {
-          ctx.fillStyle = gradient;
+          ctx.fillStyle = cachedGradient;
           ctx.fillRect(meterX + 1, rmsY, Math.max(1, meterWidth - 2), rmsFillHeight);
       }
 
@@ -162,8 +182,6 @@ export const LevelMeter = React.memo(({ engine, className, isVisible = true }: L
       const textPeak = Math.max(MIN_DB, meter.peakHold).toFixed(1);
       
       ctx.fillText(textPeak, meterX + meterWidth / 2, meterTop - 4);
-
-      frameId = requestAnimationFrame(draw);
     };
 
     draw();

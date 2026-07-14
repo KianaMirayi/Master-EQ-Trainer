@@ -5,6 +5,7 @@ import { AudioEngine } from '../lib/AudioEngine';
 import { EQNodeData, cn } from '../lib/utils';
 import { calculateLevelScore, LevelScoreReport } from '../lib/ScoreCalculator';
 import { LevelManager } from '../lib/LevelManager';
+import { ProgressionManager } from '../lib/ProgressionManager';
 import { EQCanvas, BAND_COLORS } from './EQCanvas';
 import { LevelMeter } from './LevelMeter';
 import { WaveformPlayer } from './WaveformPlayer';
@@ -145,16 +146,28 @@ function TutorialMask({ step, onNext, onClose }: { step: number, onNext: () => v
     const config = tutorialSteps[step];
     
     let frame: number;
+    let lastRectStr = '';
     const updateRect = () => {
       if (config && config.targetId) {
         const el = document.getElementById(config.targetId);
         if (el) {
-          setRect(el.getBoundingClientRect());
+          const r = el.getBoundingClientRect();
+          const rStr = `${r.left},${r.top},${r.width},${r.height}`;
+          if (rStr !== lastRectStr) {
+            setRect(r);
+            lastRectStr = rStr;
+          }
         } else {
-          setRect(null);
+          if (lastRectStr !== 'null') {
+            setRect(null);
+            lastRectStr = 'null';
+          }
         }
       } else {
-        setRect(null);
+        if (lastRectStr !== 'null') {
+          setRect(null);
+          lastRectStr = 'null';
+        }
       }
       frame = requestAnimationFrame(updateRect);
     };
@@ -359,8 +372,12 @@ export function GameView({ level, selectedTrackId, selectedRandomTags, isTestMod
   useEffect(() => {
     if (!engine) return;
     let frameId: number;
+    let lastPlaying = engine.isPlaying;
     const syncState = () => {
-      setIsPlaying(engine.isPlaying);
+      if (engine.isPlaying !== lastPlaying) {
+          setIsPlaying(engine.isPlaying);
+          lastPlaying = engine.isPlaying;
+      }
       frameId = requestAnimationFrame(syncState);
     };
     syncState();
@@ -652,9 +669,14 @@ export function GameView({ level, selectedTrackId, selectedRandomTags, isTestMod
             </div>
           )}
           {!onLevelChange && (
-            <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 ml-2 shadow-inner">
-              {targetNodes.length} Band{targetNodes.length > 1 && 's'}
-            </span>
+            <div className="flex items-center gap-2 ml-2">
+              <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400 shadow-inner">
+                {targetNodes.length} Band{targetNodes.length > 1 && 's'}
+              </span>
+              <span className="text-xs px-2 py-1 bg-slate-800 rounded text-rose-400 shadow-inner font-mono border border-slate-700/50">
+                Pass: {ProgressionManager.getPassThreshold(level)}
+              </span>
+            </div>
           )}
         </div>
 
@@ -960,7 +982,12 @@ export function GameView({ level, selectedTrackId, selectedRandomTags, isTestMod
           {onLevelChange && showTestModePanel && (
             <div className="absolute top-16 left-4 z-[100] bg-slate-900 border border-slate-700 shadow-2xl p-4 rounded-xl mt-4 shrink-0 overflow-x-auto min-w-[500px]">
               <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
-                <h3 className="text-cyan-400 font-bold text-sm">Test Mode: Level {level} Output</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-cyan-400 font-bold text-sm">Test Mode: Level {level} Output</h3>
+                  <div className="text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    Pass Score: {ProgressionManager.getPassThreshold(level)}
+                  </div>
+                </div>
                 <button 
                   onClick={() => setShowTestModePanel(false)}
                   className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"

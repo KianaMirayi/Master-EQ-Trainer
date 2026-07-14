@@ -80,14 +80,19 @@ export class ProgressionManager {
    * Gets the score required to pass a specific level.
    */
   static getPassThreshold(level: number): number {
+    if (level === -999) return 50; 
     if (level % 10 === 0) {
         if (level <= 30) return progressionConfig.passScores.boss_10_to_30;
         if (level <= 70) return progressionConfig.passScores.boss_40_to_70;
-        return progressionConfig.passScores.boss_80_to_100;
+        if (level === 80) return progressionConfig.passScores.boss_80;
+        if (level === 90) return progressionConfig.passScores.boss_90;
+        return progressionConfig.passScores.boss_100;
     } else {
         if (level < 40) return progressionConfig.passScores.normal_1_to_39;
         if (level < 70) return progressionConfig.passScores.normal_41_to_69;
-        return progressionConfig.passScores.normal_71_to_99;
+        if (level < 80) return progressionConfig.passScores.normal_71_to_79;
+        if (level < 90) return progressionConfig.passScores.normal_81_to_89;
+        return progressionConfig.passScores.normal_91_to_99;
     }
   }
 
