@@ -32,11 +32,9 @@ export class TrackManager {
         
         console.log("TrackManager: Initializing storage...");
 
-        // 1. Load built-in tracks metadata in background (won't block UI)
-        // These are static and don't need to be saved back to storage
-        this.loadBuiltInMetadata().then(() => {
-            console.log("TrackManager: Built-in metadata loaded.");
-        });
+        // 1. Load built-in tracks metadata
+        await this.loadBuiltInMetadata();
+        console.log("TrackManager: Built-in metadata loaded.");
 
         // 2. Load custom tracks from IndexedDB
         try {
