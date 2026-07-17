@@ -12,13 +12,13 @@ export interface Track {
     tags?: string[]; // Custom tags assigned by user
 }
 
-export const BUILT_IN_TRACKS: Track[] = [
-    { id: 'builtin-1', name: 'Emotional Soul', artist: 'Dvir Silverstone', url: '/built-in/Emotional Soul.mp3', isCustom: false },
-    { id: 'builtin-3', name: 'Funk Power', artist: 'Aleksandr', url: '/built-in/Funk Power.mp3', isCustom: false },
-    { id: 'builtin-7', name: 'Hold On', artist: 'Prismo', url: '/built-in/Hold On.mp3', isCustom: false },
-    { id: 'builtin-8', name: 'Sad', artist: 'Nikita Kondrashev', url: '/built-in/Sad.mp3', isCustom: false },
-    { id: 'builtin-9', name: 'Sock Hop', artist: 'Kevin MacLeod', url: '/built-in/Sock Hop.mp3', isCustom: false },
-    { id: 'builtin-10', name: 'Vacation', artist: 'Aleksandr', url: '/built-in/Vacation.mp3', isCustom: false },
+let BUILT_IN_TRACKS: Track[] = [
+    { id: 'builtin-1', name: 'Emotional Soul', artist: 'Dvir Silverstone', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Emotional Soul.mp3', isCustom: false },
+    { id: 'builtin-3', name: 'Funk Power', artist: 'Aleksandr', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Funk Power.mp3', isCustom: false },
+    { id: 'builtin-7', name: 'Hold On', artist: 'Prismo', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Hold On.mp3', isCustom: false },
+    { id: 'builtin-8', name: 'Sad', artist: 'Nikita Kondrashev', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Sad.mp3', isCustom: false },
+    { id: 'builtin-9', name: 'Sock Hop', artist: 'Kevin MacLeod', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Sock Hop.mp3', isCustom: false },
+    { id: 'builtin-10', name: 'Vacation', artist: 'Aleksandr', url: 'https://audioasset.masteryourear.com.cn/EQTrainingSongs/FullSongs/Vacation.mp3', isCustom: false },
 ];
 
 const STORE_KEY = 'custom-tracks-v2';
@@ -112,40 +112,19 @@ export class TrackManager {
 
     static async loadBuiltInMetadata(): Promise<void> {
         try {
-            const promises = BUILT_IN_TRACKS.map(t => new Promise<void>((resolve) => {
-                if (!t.url) return resolve();
-                const absoluteUrl = new URL(t.url, window.location.origin).href;
-                jsmediatags.read(absoluteUrl, {
-                    onSuccess: function(tag) {
-                        let coverArt: string | undefined;
-                        const picture = tag.tags.picture;
-                        if (picture) {
-                            let base64String = "";
-                            for (let i = 0; i < picture.data.length; i++) {
-                                base64String += String.fromCharCode(picture.data[i]);
-                            }
-                            coverArt = `data:${picture.format};base64,${window.btoa(base64String)}`;
-                        }
-                        if (tag.tags.title) t.name = tag.tags.title;
-                        if (tag.tags.artist) t.artist = tag.tags.artist;
-                        if (coverArt) {
-                            TrackManager.resizeImage(coverArt).then(resized => {
-                                t.coverArt = resized;
-                                resolve();
-                            });
-                        } else {
-                            resolve();
-                        }
-                    },
-                    onError: function(error) {
-                        // Silent fail for built-in tags to avoid console noise if files are missing
-                        resolve();
-                    }
-                });
-            }));
-            await Promise.all(promises);
+            const res = await fetch('https://audioasset.masteryourear.com.cn/tracks.json');
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    // Mark as built-in and not custom
+                    BUILT_IN_TRACKS = data.map(t => ({
+                        ...t,
+                        isCustom: false
+                    }));
+                }
+            }
         } catch (e) {
-            console.warn("TrackManager: Failed to fetch built-in metadata", e);
+            console.warn("TrackManager: Failed to fetch remote tracks.json, using defaults.", e);
         }
     }
 

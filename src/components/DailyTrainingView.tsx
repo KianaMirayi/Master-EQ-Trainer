@@ -180,7 +180,7 @@ export const DailyTrainingView: React.FC<DailyTrainingViewProps> = ({
         if (tToPlay.file) {
           arrayBuffer = await tToPlay.file.arrayBuffer();
         } else if (tToPlay.url) {
-          const res = await fetch(tToPlay.url);
+          const res = await fetch(encodeURI(tToPlay.url));
           arrayBuffer = await res.arrayBuffer();
         }
         if (arrayBuffer) {
