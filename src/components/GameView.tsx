@@ -39,13 +39,14 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
         if (track.file) {
             arrayBuffer = await track.file.arrayBuffer();
         } else if (track.url) {
-            const res = await fetch(encodeURI(track.url));
-            if (!res.ok) throw new Error(`Failed to fetch ${track.url}: ${res.statusText} (${res.status})`);
+            const url = TrackManager.getProxiedUrl(track.url);
+            const res = await fetch(encodeURI(url));
+            if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText} (${res.status})`);
             
             // Check if Vercel or another host returned an HTML page (like SPA fallback) instead of an audio file
             const contentType = res.headers.get('content-type') || '';
             if (contentType.includes('text/html')) {
-                throw new Error(`The server returned an HTML page instead of an audio file for ${track.url}. This usually happens if the file is missing and the server falls back to index.html.`);
+                throw new Error(`The server returned an HTML page instead of an audio file for ${url}. This usually happens if the file is missing and the server falls back to index.html.`);
             }
             
             arrayBuffer = await res.arrayBuffer();

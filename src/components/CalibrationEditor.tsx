@@ -247,7 +247,8 @@ function CalibrationEditor({ preset, onSave, onBack }: { preset: CalibrationPres
       let arrayBuffer;
       if (track.file) arrayBuffer = await track.file.arrayBuffer();
       else if (track.url) {
-        const res = await fetch(encodeURI(track.url));
+        const url = TrackManager.getProxiedUrl(track.url);
+        const res = await fetch(encodeURI(url));
         if (res.ok) arrayBuffer = await res.arrayBuffer();
       }
       

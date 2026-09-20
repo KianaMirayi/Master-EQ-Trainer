@@ -23,7 +23,8 @@ const getTrackBuffer = async (track: Track, ctx: AudioContext): Promise<AudioBuf
         let arrayBuffer;
         if (track.file) arrayBuffer = await track.file.arrayBuffer();
         else if (track.url) {
-            const res = await fetch(encodeURI(track.url));
+            const url = TrackManager.getProxiedUrl(track.url);
+            const res = await fetch(encodeURI(url));
             arrayBuffer = await res.arrayBuffer();
         }
         if (arrayBuffer) return await ctx.decodeAudioData(arrayBuffer);

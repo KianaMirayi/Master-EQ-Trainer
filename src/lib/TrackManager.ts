@@ -108,9 +108,17 @@ export class TrackManager {
         console.log("TrackManager: Initialization complete.");
     }
 
+    static getProxiedUrl(originalUrl: string): string {
+        if (import.meta.env.DEV && originalUrl.startsWith('https://audioasset.masteryourear.com.cn')) {
+            return originalUrl.replace('https://audioasset.masteryourear.com.cn', '/proxy-audio');
+        }
+        return originalUrl;
+    }
+
     static async loadBuiltInMetadata(): Promise<void> {
         try {
-            const res = await fetch('https://audioasset.masteryourear.com.cn/tracks.json');
+            const url = this.getProxiedUrl('https://audioasset.masteryourear.com.cn/tracks.json');
+            const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data) && data.length > 0) {
